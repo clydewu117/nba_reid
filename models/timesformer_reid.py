@@ -6,7 +6,8 @@ TimeSformer backbone wrapper for ReID within unireid framework.
 - Mirrors the Uniformerv2ReID interface so it can plug into existing training/eval
 
 Requirements:
-- Local TimeSformer repository available (default: sibling folder ../TimeSformer)
+- Bundled official TimeSformer code under nba_reid/timesformer (used by default)
+- Optional: TIMESFORMER.REPO_PATH to an external repo explicitly provided by user
 - Dependencies: einops, fvcore (already used), etc.
 
 Config namespace expected (add in config/defaults.py):
@@ -30,31 +31,39 @@ import torch.nn.functional as F
 
 from .build import MODEL_REGISTRY
 from .uniformerv2_reid import ReIDHead  # reuse the BNNeck head
-from .timesformer_model import (
-    VisionTransformer,
-    load_pretrained_timesformer,
-)  # use local lightweight implementation
 import utils.logging as logging
 
 logger = logging.get_logger(__name__)
 
 
 def _ensure_timesformer_on_path(repo_path: str = ""):
-    """Ensure the official TimeSformer repo is importable when requested.
-    - If repo_path is provided and exists, append it to sys.path
-    - Else, try sibling '../TimeSformer'
+    """Make sure the top-level module name 'timesformer' can be imported.
+
+    Behavior (no implicit external fallback):
+    - If `repo_path` is provided and contains a 'timesformer' package, add its parent directory to sys.path.
+    - Otherwise, expose the bundled copy at nba_reid/timesformer by adding the nba_reid directory to sys.path.
+
+    This avoids searching arbitrary sibling '../TimeSformer' locations and keeps resolution deterministic.
     """
-    candidates = []
+    # If user explicitly points to an external repo, honor it (but require it contains 'timesformer')
     if repo_path:
-        candidates.append(repo_path)
-    # try sibling path relative to this file
-    this_dir = os.path.dirname(os.path.abspath(__file__))
-    candidates.append(os.path.abspath(os.path.join(this_dir, "..", "..", "TimeSformer")))
-    candidates.append(os.path.abspath(os.path.join(this_dir, "..", "TimeSformer")))
-    for p in candidates:
-        if os.path.isdir(p) and p not in sys.path:
-            sys.path.insert(0, p)
-            return p
+        repo_path = os.path.abspath(repo_path)
+        parent = repo_path
+        # If the path itself is a 'timesformer' folder, use its parent; else assume it contains that subfolder
+        if os.path.basename(parent).lower() == "timesformer":
+            parent = os.path.dirname(parent)
+        if os.path.isdir(os.path.join(parent, "timesformer")):
+            if parent not in sys.path:
+                sys.path.insert(0, parent)
+            return parent
+        # If provided but invalid, fall through to bundled copy
+
+    # Add nba_reid directory (so that nba_reid/timesformer is importable as top-level 'timesformer')
+    this_dir = os.path.dirname(os.path.abspath(__file__))  # .../nba_reid/models
+    nba_reid_dir = os.path.abspath(os.path.join(this_dir, ".."))  # .../nba_reid
+    if os.path.isdir(os.path.join(nba_reid_dir, "timesformer")) and nba_reid_dir not in sys.path:
+        sys.path.insert(0, nba_reid_dir)
+        return nba_reid_dir
     return None
 
 
@@ -77,7 +86,7 @@ class TimeSformerReID(nn.Module):
             else ""
         )
 
-        # -------- Configure backbone --------
+        # -------- Configure backbone (official TimeSformer only) --------
         img_size = cfg.DATA.HEIGHT  # assume square; align with transforms
         t_size = cfg.DATA.NUM_FRAMES
         patch_size = cfg.TIMESFORMER.PATCH_SIZE
@@ -88,124 +97,62 @@ class TimeSformerReID(nn.Module):
             cfg.MODEL.NUM_CLASSES
         )  # used for classifier only; we'll set 0 for backbone
 
-        # Instantiate backbone; set num_classes=0 so head is Identity
-        impl = getattr(cfg.TIMESFORMER, "BACKBONE_IMPL", "lite") if hasattr(cfg, "TIMESFORMER") else "lite"
-        if impl == "official":
-            # Import official VisionTransformer
-            try:
-                from timesformer.models.vit import VisionTransformer as OfficialViT
-            except Exception as e:
-                logger.warning(f"[ReID][TimeSformer] Failed to import official TimeSformer ({e}), falling back to lite impl.")
-                OfficialViT = None
-
-            if OfficialViT is not None:
-                self.backbone = OfficialViT(
-                    img_size=img_size,
-                    patch_size=patch_size,
-                    in_chans=3,
-                    num_classes=0,
-                    embed_dim=embed_dim,
-                    depth=12,
-                    num_heads=12,
-                    mlp_ratio=4.0,
-                    qkv_bias=True,
-                    drop_rate=0.0,
-                    attn_drop_rate=0.0,
-                    drop_path_rate=drop_path_rate,
-                    num_frames=t_size,
-                    attention_type=attention_type,
-                    dropout=0.0,
-                )
-            else:
-                # fallback to local lite implementation
-                self.backbone = VisionTransformer(
-                    img_size=img_size,
-                    patch_size=patch_size,
-                    in_chans=3,
-                    num_classes=0,
-                    embed_dim=embed_dim,
-                    depth=12,
-                    num_heads=12,
-                    mlp_ratio=4.0,
-                    qkv_bias=True,
-                    drop_rate=0.0,
-                    attn_drop_rate=0.0,
-                    drop_path_rate=drop_path_rate,
-                    num_frames=t_size,
-                    attention_type=attention_type,
-                    dropout=0.0,
-                )
-        else:
-            self.backbone = VisionTransformer(
-                img_size=img_size,
-                patch_size=patch_size,
-                in_chans=3,
-                num_classes=0,
-                embed_dim=embed_dim,
-                depth=12,
-                num_heads=12,
-                mlp_ratio=4.0,
-                qkv_bias=True,
-                drop_rate=0.0,
-                attn_drop_rate=0.0,
-                drop_path_rate=drop_path_rate,
-                num_frames=t_size,
-                attention_type=attention_type,
-                dropout=0.0,
+        # Instantiate official VisionTransformer; set num_classes=0 so head is Identity
+        try:
+            from timesformer.models.vit import VisionTransformer as OfficialViT
+        except Exception as e:
+            raise ImportError(
+                f"[ReID][TimeSformer] Failed to import official TimeSformer modules: {e}. "
+                "Ensure 'nba_reid/timesformer' exists or set TIMESFORMER.REPO_PATH to a valid TimeSformer repo."
             )
+
+        self.backbone = OfficialViT(
+            img_size=img_size,
+            patch_size=patch_size,
+            in_chans=3,
+            num_classes=0,
+            embed_dim=embed_dim,
+            depth=12,
+            num_heads=12,
+            mlp_ratio=4.0,
+            qkv_bias=True,
+            drop_rate=0.0,
+            attn_drop_rate=0.0,
+            drop_path_rate=drop_path_rate,
+            num_frames=t_size,
+            attention_type=attention_type,
+            dropout=0.0,
+        )
 
         # Default cfg key for pretrained interpolation
         # No external default cfg required; local model handles positional/time embedding resize
 
-        # Load pretrained if provided
+        # Load pretrained if provided (official helper only)
         if cfg.TIMESFORMER.PRETRAIN:
             ckpt_path = cfg.TIMESFORMER.PRETRAIN
             try:
-                if impl == "official" and 'OfficialViT' in locals() and isinstance(self.backbone, nn.Module) and self.backbone.__class__.__name__ == 'VisionTransformer':
-                    # Use official helper to load and adapt weights
-                    try:
-                        from timesformer.models.helpers import load_pretrained as tsf_load_pretrained
-                        from timesformer.models.vit import default_cfgs as tsf_default_cfgs
-                        from timesformer.models.vit import _conv_filter as tsf_conv_filter
-                        num_patches = (img_size // patch_size) * (img_size // patch_size)
-                        tsf_load_pretrained(
-                            self.backbone,
-                            cfg=tsf_default_cfgs['vit_base_patch16_224'],
-                            num_classes=0,
-                            in_chans=3,
-                            filter_fn=tsf_conv_filter,
-                            img_size=img_size,
-                            num_frames=t_size,
-                            num_patches=num_patches,
-                            attention_type=attention_type,
-                            pretrained_model=ckpt_path,
-                            strict=False,
-                        )
-                        logger.info(
-                            f"[ReID][TimeSformer] (official) Loaded pretrained weights from {ckpt_path}"
-                        )
-                    except Exception as ee:
-                        logger.warning(f"[ReID][TimeSformer] Official load_pretrained failed: {ee}; trying lite loader...")
-                        # minimal fallback: loose load state dict
-                        try:
-                            state = torch.load(ckpt_path, map_location="cpu")
-                            if isinstance(state, dict) and "model_state" in state:
-                                state = state["model_state"]
-                            elif isinstance(state, dict) and "state_dict" in state:
-                                state = state["state_dict"]
-                            load_res = self.backbone.load_state_dict(state, strict=False)
-                            logger.info(
-                                f"[ReID][TimeSformer] (fallback) Loaded with strict=False | missing: {len(load_res.missing_keys)} unexpected: {len(load_res.unexpected_keys)}"
-                            )
-                        except Exception as e3:
-                            logger.warning(f"[ReID][TimeSformer] Fallback load also failed: {e3}")
-                else:
-                    missing, unexpected = load_pretrained_timesformer(self.backbone, ckpt_path)  # type: ignore
-                    logger.info(
-                        f"[ReID][TimeSformer] Loaded pretrained weights from {ckpt_path} | missing: {len(missing)} unexpected: {len(unexpected)}"
-                    )
+                from timesformer.models.helpers import load_pretrained as tsf_load_pretrained
+                from timesformer.models.vit import default_cfgs as tsf_default_cfgs
+                from timesformer.models.vit import _conv_filter as tsf_conv_filter
+                num_patches = (img_size // patch_size) * (img_size // patch_size)
+                tsf_load_pretrained(
+                    self.backbone,
+                    cfg=tsf_default_cfgs['vit_base_patch16_224'],
+                    num_classes=0,
+                    in_chans=3,
+                    filter_fn=tsf_conv_filter,
+                    img_size=img_size,
+                    num_frames=t_size,
+                    num_patches=num_patches,
+                    attention_type=attention_type,
+                    pretrained_model=ckpt_path,
+                    strict=False,
+                )
+                logger.info(
+                    f"[ReID][TimeSformer] Loaded pretrained weights from {ckpt_path}"
+                )
             except Exception as e:
-                logger.warning(
+                raise RuntimeError(
                     f"[ReID][TimeSformer] Failed to load pretrained weights from {ckpt_path}: {e}"
                 )
 

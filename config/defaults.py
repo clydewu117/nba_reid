@@ -14,7 +14,7 @@ _C.DATA = CfgNode()
 _C.DATA.ROOT = "/fs/scratch/PAS3184/v2"
 _C.DATA.VIDEO_TYPE = "mask"  # 'appearance' or 'mask'
 _C.DATA.SHOT_TYPE = "both"  # 'freethrow', '3pt', or 'both'
-_C.DATA.NUM_FRAMES = 16  # 每个视频采样的帧数
+_C.DATA.NUM_FRAMES = 32  # 每个视频采样的帧数
 _C.DATA.FRAME_STRIDE = 4  # 帧采样间隔
 _C.DATA.HEIGHT = 224
 _C.DATA.WIDTH = 224
@@ -37,9 +37,7 @@ _C.MODEL.ARCH = "uniformerv2"  # options: 'uniformerv2', 'timesformer', 'mvit'
 # -----------------------------------------------------------------------------
 _C.UNIFORMERV2 = CfgNode()
 _C.UNIFORMERV2.BACKBONE = "uniformerv2_b16"
-_C.UNIFORMERV2.PRETRAIN = (
-    "/users/PAS2985/lei441/unireid/uniformerv2_k400_vit-b16_frame8.pth"
-)
+_C.UNIFORMERV2.PRETRAIN = ""  # set your pretrained path explicitly if needed
 _C.UNIFORMERV2.FROZEN = True
 _C.UNIFORMERV2.N_LAYERS = 12
 _C.UNIFORMERV2.N_DIM = 768
@@ -60,7 +58,7 @@ _C.UNIFORMERV2.DOUBLE_LMHRA = True
 # -----------------------------------------------------------------------------
 _C.TIMESFORMER = CfgNode()
 _C.TIMESFORMER.REPO_PATH = ""  # optional absolute path to local TimeSformer repo
-_C.TIMESFORMER.PRETRAIN = "/users/PAS2099/clydewu117/unireid/checkpoints/timesformer/TimeSformer_divST_8x32_224_K400.pyth"  # optional pretrained checkpoint (.pyth / .pth)
+_C.TIMESFORMER.PRETRAIN = "/users/PAS2099/clydewu117/nba_reid/checkpoints/timesformer/TimeSformer_divST_8x32_224_K400.pyth"  # optional pretrained checkpoint (.pyth / .pth)
 _C.TIMESFORMER.ATTENTION_TYPE = (
     "divided_space_time"  # 'divided_space_time' | 'space_only' | 'joint_space_time'
 )
@@ -68,13 +66,13 @@ _C.TIMESFORMER.PATCH_SIZE = 16
 _C.TIMESFORMER.DROP_PATH_RATE = 0.1
 _C.TIMESFORMER.EMBED_DIM = 768
 _C.TIMESFORMER.FROZEN = False
-_C.TIMESFORMER.BACKBONE_IMPL = "lite"  # 'lite' (local minimal impl) or 'official' (import from facebookresearch/TimeSformer)
+_C.TIMESFORMER.BACKBONE_IMPL = "official"  # force official implementation; local lite impl is disabled
 
 # -----------------------------------------------------------------------------
 # MViT (SlowFast) - minimal knobs for ReID backbone
 # -----------------------------------------------------------------------------
 _C.MVIT = CfgNode()
-_C.MVIT.PRETRAIN = "/users/PAS2099/clydewu117/unireid/checkpoints/mvitv2/MViTv2_S_16x4_k400_f302660347.pyth"  # optional SlowFast checkpoint path
+_C.MVIT.PRETRAIN = "/users/PAS2099/clydewu117/nba_reid/checkpoints/mvitv2/MViTv2_S_16x4_k400_f302660347.pyth"  # optional SlowFast checkpoint path
 _C.MVIT.FROZEN = False  # freeze backbone
 _C.MVIT.USE_MEAN_POOLING = False  # use mean of patch tokens instead of CLS
 

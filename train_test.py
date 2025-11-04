@@ -279,14 +279,12 @@ def train(cfg):
     print("Initializing WandB")
     wandb.init(
         project=f"nba-reid",
-        name=f"{cfg.MODEL.ARCH}_{cfg.DATA.VIDEO_TYPE}_{cfg.DATA.SHOT_TYPE}",
-        config={"num_classes": num_classes, "num_frames": cfg.DATA.NUM_FRAMES},
+        name=f"{cfg.MODEL.ARCH}_{cfg.DATA.VIDEO_TYPE}_{cfg.DATA.SHOT_TYPE}_{cfg.NUM_FRAMES}f",
+        config={"num_classes": num_classes, "num_frames": cfg.DATA.NUM_FRAMES, "batch_size": cfg.SOLVER.BATCH_SIZE},
         dir=cfg.OUTPUT_DIR,
     )
 
     model = build_model(cfg).to(device)
-    # Debug: confirm the actual model class built
-    print("[DEBUG] BUILT MODEL:", type(model).__name__)
     wandb.watch(model, log="all", log_freq=100)
     loss_fn = make_loss(cfg, num_classes)
 
@@ -370,9 +368,6 @@ def main():
     if args.opts:
         cfg.merge_from_list(args.opts)
     cfg.freeze()
-
-    # Debug: show which model is actually selected from config
-    print("[DEBUG] MODEL.NAME:", cfg.MODEL.NAME, "MODEL.MODEL_NAME:", cfg.MODEL.MODEL_NAME, "MODEL.ARCH:", cfg.MODEL.ARCH)
 
     if args.mode == "train":
         train(cfg)
