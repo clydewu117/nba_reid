@@ -106,6 +106,7 @@ dependencies:
       - cycler==0.12.1
       - cython==3.1.6
       - decorator==4.4.2
+      - einops==0.8.1
       - eval-type-backport==0.2.2
       - fairscale==0.4.13
       - filelock==3.13.1
