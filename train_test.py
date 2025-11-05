@@ -279,8 +279,12 @@ def train(cfg):
     print("Initializing WandB")
     wandb.init(
         project=f"nba-reid",
-        name=f"{cfg.MODEL.ARCH}_{cfg.DATA.VIDEO_TYPE}_{cfg.DATA.SHOT_TYPE}_{cfg.NUM_FRAMES}f",
-        config={"num_classes": num_classes, "num_frames": cfg.DATA.NUM_FRAMES, "batch_size": cfg.SOLVER.BATCH_SIZE},
+        name=f"{cfg.MODEL.ARCH}_{cfg.DATA.VIDEO_TYPE}_{cfg.DATA.SHOT_TYPE}_{cfg.DATA.NUM_FRAMES}f",
+        config={
+            "num_classes": num_classes,
+            "num_frames": cfg.DATA.NUM_FRAMES,
+            "batch_size": cfg.DATA.BATCH_SIZE,
+        },
         dir=cfg.OUTPUT_DIR,
     )
 
@@ -331,7 +335,10 @@ def train(cfg):
                         "rank5": rank5,
                         "rank10": rank10,
                     },
-                    os.path.join(cfg.OUTPUT_DIR, "best_model.pth"),
+                    os.path.join(
+                        cfg.OUTPUT_DIR,
+                        f"{os.path.basename(cfg.OUTPUT_DIR)}_best_model.pth",
+                    ),
                 )
                 print(f"✓ Saved best model at epoch {epoch}")
                 print(
