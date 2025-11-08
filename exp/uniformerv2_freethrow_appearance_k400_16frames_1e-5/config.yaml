@@ -2,12 +2,12 @@ DATA:
   BATCH_SIZE: 16  # ✅ 修改：从8改为64，适合sampler (16 identities × 4 instances)
   FRAME_STRIDE: 4
   HEIGHT: 224
-  NUM_FRAMES: 32
+  NUM_FRAMES: 16
   NUM_WORKERS: 4
   ROOT: /fs/scratch/PAS3184/v2
   SHOT_TYPE: freethrow
   TRAIN_RATIO: 0.7
-  VIDEO_TYPE: mask
+  VIDEO_TYPE: appearance
   WIDTH: 224
   USE_SAMPLER: true  # 启用RandomIdentitySampler
   NUM_INSTANCES: 4   # 每个identity在batch中的样本数
@@ -17,7 +17,7 @@ LOSS:
   ID_WEIGHT: 1.0
   LABEL_SMOOTH_EPSILON: 0.1
   TRIPLET_DISTANCE: euclidean
-  TRIPLET_MARGIN: 0.3
+  TRIPLET_MARGIN: 0.4
   TRIPLET_WEIGHT: 1.0
   USE_LABEL_SMOOTH: true
   USE_TRIPLET: true
@@ -30,7 +30,7 @@ MODEL:
   NUM_CLASSES: 0
   USE_CHECKPOINT: true
 NUM_GPUS: 1
-OUTPUT_DIR: ./outputs/uniformerv2_freethrow_k400_16frames_1e-5  # ✅ 修改：输出目录名称区分
+OUTPUT_DIR: ./outputs/uniformerv2_freethrow_appearance_k400_16frames_1e-5  # ✅ 修改：输出目录名称区分
 REID:
   EMBED_DIM: 512
   NECK_FEAT: after
@@ -42,7 +42,7 @@ SOLVER:
     CLIP_VALUE: 1.0
     ENABLED: true
   COSINE_AFTER_WARMUP: true
-  COSINE_END_LR: 1.0e-06
+  COSINE_END_LR: 1.0e-07
   EVAL_PERIOD: 1
   GAMMA: 0.1
   LOG_PERIOD: 1
@@ -75,7 +75,7 @@ UNIFORMERV2:
   N_DIM: 768
   N_HEAD: 12
   N_LAYERS: 4
-  PRETRAIN: /users/PAS2985/lei441/unireid/uniformerv2_k400_vit-b16_frame8.pth
+  PRETRAIN: /users/PAS2985/lei441/unireid/uniformerv2-base-p16-res224_clip-kinetics710-8f_kinetics400.pth
   RETURN_LIST:
   - 8
   - 9

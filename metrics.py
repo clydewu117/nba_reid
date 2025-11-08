@@ -115,6 +115,6 @@ class R1_mAP_eval(object):
         q_pids = np.asarray(self.pids[:self.num_query])
         g_pids = np.asarray(self.pids[self.num_query:])
 
-        distmat = cdist(qf, gf, metric='cosine')
+        distmat = cdist(qf, gf, metric='euclidean')
         cmc, mAP = evaluate_rank(distmat, q_pids, g_pids, self.max_rank)
         return cmc, mAP

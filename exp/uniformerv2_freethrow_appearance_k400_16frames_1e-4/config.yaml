@@ -7,7 +7,7 @@ DATA:
   ROOT: /fs/scratch/PAS3184/v2
   SHOT_TYPE: freethrow
   TRAIN_RATIO: 0.7
-  VIDEO_TYPE: mask
+  VIDEO_TYPE: appearance
   WIDTH: 224
   USE_SAMPLER: true  # 启用RandomIdentitySampler
   NUM_INSTANCES: 4   # 每个identity在batch中的样本数
@@ -30,13 +30,13 @@ MODEL:
   NUM_CLASSES: 0
   USE_CHECKPOINT: true
 NUM_GPUS: 1
-OUTPUT_DIR: ./outputs/uniformerv2_freethrow_k400_16frames_1e-5  # ✅ 修改：输出目录名称区分
+OUTPUT_DIR: ./outputs/uniformerv2_freethrow_k400_16frames_1e-4  # ✅ 修改：输出目录名称区分
 REID:
   EMBED_DIM: 512
   NECK_FEAT: after
 SEED: 42
 SOLVER:
-  BASE_LR: 1e-5
+  BASE_LR: 1e-4
   CHECKPOINT_PERIOD: 10
   CLIP_GRADIENTS:
     CLIP_VALUE: 1.0
@@ -71,11 +71,11 @@ UNIFORMERV2:
   - 0.5
   - 0.5
   MLP_FACTOR: 4.0
-  NO_LMHRA: true
+  NO_LMHRA: false
   N_DIM: 768
   N_HEAD: 12
   N_LAYERS: 4
-  PRETRAIN: /users/PAS2985/lei441/unireid/uniformerv2_k400_vit-b16_frame8.pth
+  PRETRAIN: /users/PAS2985/lei441/unireid/uniformerv2-base-p16-res224_clip-kinetics710-8f_kinetics400.pth
   RETURN_LIST:
   - 8
   - 9

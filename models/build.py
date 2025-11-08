@@ -4,7 +4,6 @@
 """Model construction functions."""
 
 import torch
-import importlib
 from fvcore.common.registry import Registry
 from utils.ema import ModelEmaV2
 
@@ -38,23 +37,8 @@ def build_model(cfg, gpu_id=None, ema=False):
             cfg.NUM_GPUS == 0
         ), "Cuda is not available. Please set `NUM_GPUS: 0 for running on CPUs."
 
-    # Construct the model (lazy-register by importing only what's needed)
+    # Construct the model
     name = cfg.MODEL.MODEL_NAME
-    # Map model names to their module paths for on-demand import
-    name_to_module = {
-        "TimeSformerReID": ".timesformer_reid",
-        "MViTReID": ".mvitv2_reid",
-        "Uniformerv2": ".uniformerv2",
-        "Uniformerv2ReID": ".uniformerv2_reid",
-    }
-    if name in name_to_module:
-        # Import the module to trigger registration into MODEL_REGISTRY
-        importlib.import_module(name_to_module[name], package=__package__)
-    else:
-        logger.warning(
-            f"Model name {name} not in known map; assuming it's already registered."
-        )
-
     model = MODEL_REGISTRY.get(name)(cfg)
 
     if cfg.MODEL.ARCH in ['uniformer']:

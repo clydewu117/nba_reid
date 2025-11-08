@@ -14,58 +14,71 @@ logger = logging.get_logger(__name__)
 
 class ReIDHead(nn.Module):
     """
-    ReID Head with BNNeck and feature projection to 512-dim
+    ReID Head with BNNeck (Single Branch)
     """
-    def __init__(self, in_dim, num_classes, embed_dim=512, neck_feat='after'):
+    def __init__(self, in_dim, num_classes, neck_feat='after'):
         super().__init__()
         self.num_classes = num_classes
         self.neck_feat = neck_feat
-        self.embed_dim = embed_dim
         
-        # Feature projection: 768 -> 512
-        self.feat_proj = nn.Linear(in_dim, embed_dim)
-        
-        # BNNeck on projected features
-        self.bottleneck = nn.BatchNorm1d(embed_dim)
+        # BNNeck
+        self.bottleneck = nn.BatchNorm1d(in_dim)
         self.bottleneck.bias.requires_grad_(False)
+        self.bottleneck.apply(weights_init_kaiming)
         
         # Classifier
-        self.classifier = nn.Linear(embed_dim, num_classes, bias=False)
-        
-        self._init_params()
-    
-    def _init_params(self):
-        nn.init.kaiming_normal_(self.feat_proj.weight, mode='fan_out')
-        nn.init.constant_(self.feat_proj.bias, 0)
-        nn.init.constant_(self.bottleneck.weight, 1)
-        nn.init.constant_(self.bottleneck.bias, 0)
-        nn.init.normal_(self.classifier.weight, std=0.001)
+        self.classifier = nn.Linear(in_dim, num_classes, bias=False)
+        self.classifier.apply(weights_init_classifier)
     
     def forward(self, features, label=None):
         """
         Args:
             features: [B, 768] global features from backbone
         Returns:
-            Training: (cls_score, global_feat, normalized_feat)
-            Testing: normalized_feat [B, 512]
+            Training: dict with 'cls_score', 'bn_feat', 'feat'
+            Testing: normalized features [B, 768]
         """
-        # Project to 512-dim
-        feat_proj = self.feat_proj(features)  # [B, 768] -> [B, 512]
-        
         # BNNeck
-        bn_feat = self.bottleneck(feat_proj)
+        bn_feat = self.bottleneck(features)  # [B, 768]
         
-        # Normalized feature for retrieval
         if self.neck_feat == 'after':
             feat = F.normalize(bn_feat, p=2, dim=1)
         else:
-            feat = F.normalize(feat_proj, p=2, dim=1)
-        
+            feat = F.normalize(features, p=2, dim=1)
+
         if self.training:
             cls_score = self.classifier(bn_feat)
-            return cls_score, feat_proj, feat
+            return cls_score, bn_feat, feat
         else:
-            return feat
+            # Testing: return normalized feature
+            if self.neck_feat == 'after':
+                return F.normalize(bn_feat, p=2, dim=1)
+            else:
+                return F.normalize(features, p=2, dim=1)
+
+
+# 添加初始化函数
+def weights_init_kaiming(m):
+    classname = m.__class__.__name__
+    if classname.find('Linear') != -1:
+        nn.init.kaiming_normal_(m.weight, a=0, mode='fan_out')
+        nn.init.constant_(m.bias, 0.0)
+    elif classname.find('Conv') != -1:
+        nn.init.kaiming_normal_(m.weight, a=0, mode='fan_in')
+        if m.bias is not None:
+            nn.init.constant_(m.bias, 0.0)
+    elif classname.find('BatchNorm') != -1:
+        if m.affine:
+            nn.init.constant_(m.weight, 1.0)
+            nn.init.constant_(m.bias, 0.0)
+
+
+def weights_init_classifier(m):
+    classname = m.__class__.__name__
+    if classname.find('Linear') != -1:
+        nn.init.normal_(m.weight, std=0.001)
+        if m.bias:
+            nn.init.constant_(m.bias, 0.0)
 
 
 @MODEL_REGISTRY.register()
@@ -136,12 +149,10 @@ class Uniformerv2ReID(nn.Module):
         # 3. ReID Head (BNNeck + Linear)
         # -------------------------------
         self.neck_feat = cfg.REID.NECK_FEAT if hasattr(cfg, 'REID') else 'after'
-        self.embed_dim = cfg.REID.EMBED_DIM if hasattr(cfg, 'REID') and hasattr(cfg.REID, 'EMBED_DIM') else 512
 
         self.reid_head = ReIDHead(
             in_dim=self.feat_dim,
             num_classes=num_classes,
-            embed_dim=self.embed_dim,
             neck_feat=self.neck_feat
         )
 
@@ -183,7 +194,7 @@ class Uniformerv2ReID(nn.Module):
             label: [B] person IDs (optional, for training)
         
         Returns:
-            Training: dict with 'cls_score', 'global_feat', 'feat'
+            Training: dict with 'cls_score', 'bn_feat', 'feat'
             Testing: normalized features [B, 512]
         """
         
@@ -192,10 +203,10 @@ class Uniformerv2ReID(nn.Module):
         
         # Apply ReID head
         if self.training:
-            cls_score, global_feat, feat = self.reid_head(features, label)
+            cls_score, bn_feat, feat = self.reid_head(features, label)
             return {
                 'cls_score': cls_score,    # [B, num_classes] for ID loss
-                'global_feat': global_feat, # [B, 512] for triplet loss
+                'bn_feat': bn_feat, # [B, 512] for triplet loss
                 'feat': feat               # [B, 512] normalized for eval
             }
         else:

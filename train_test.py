@@ -65,13 +65,13 @@ def train_one_epoch(cfg, model, train_loader, optimizer, loss_fn, scaler, epoch,
         pids = batch['pid'].to(device)
 
         with autocast():
-            # Model返回字典: {'cls_score', 'global_feat', 'feat'}
+            # Model返回字典: {'cls_score', 'bn_feat', 'feat'}
             outputs = model(videos, label=pids)
             
             # Loss function接收单独的参数
             loss, loss_dict = loss_fn(
                 outputs['cls_score'], 
-                outputs['global_feat'], 
+                outputs['bn_feat'], 
                 outputs['feat'], 
                 pids
             )
@@ -401,17 +401,17 @@ def train(cfg):
                 print(f"  Rank-10 : {rank10:.2%}")
                 print(f"  mAP     : {mAP:.2%}")
             
-            # 每隔一定epoch也保存checkpoint
-            if epoch % (cfg.SOLVER.EVAL_PERIOD * 5) == 0:
-                checkpoint = {
-                    'epoch': epoch,
-                    'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'scheduler_state_dict': scheduler.state_dict(),
-                    'rank1': rank1,
-                    'mAP': mAP,
-                }
-                torch.save(checkpoint, os.path.join(cfg.OUTPUT_DIR, f'checkpoint_epoch_{epoch}.pth'))
+            # # 每隔一定epoch也保存checkpoint
+            # if epoch % (cfg.SOLVER.EVAL_PERIOD * 5) == 0:
+            #     checkpoint = {
+            #         'epoch': epoch,
+            #         'model_state_dict': model.state_dict(),
+            #         'optimizer_state_dict': optimizer.state_dict(),
+            #         'scheduler_state_dict': scheduler.state_dict(),
+            #         'rank1': rank1,
+            #         'mAP': mAP,
+            #     }
+            #     torch.save(checkpoint, os.path.join(cfg.OUTPUT_DIR, f'checkpoint_epoch_{epoch}.pth'))
 
     print("\n" + "=" * 80)
     print("Training Completed! Best Results:")
