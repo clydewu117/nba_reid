@@ -1,4 +1,14 @@
 checkpoints/
 outputs/
-inference_output/
+inference_outputs/
+slurm_output/
+
+train_test.sh
+
+__pycache__/
+config/__pycache__/
+data/__pycache__/
+models/__pycache__/
+utils/__pycache__/
+
 test_results/
