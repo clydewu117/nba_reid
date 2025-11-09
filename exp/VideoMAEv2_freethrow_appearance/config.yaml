@@ -7,7 +7,7 @@ DATA:
   ROOT: /fs/scratch/PAS3184/v2
   SHOT_TYPE: freethrow
   TRAIN_RATIO: 0.7
-  VIDEO_TYPE: mask
+  VIDEO_TYPE: appearance
   WIDTH: 224
   USE_SAMPLER: true
   NUM_INSTANCES: 4
@@ -30,7 +30,7 @@ MODEL:
   NUM_CLASSES: 0
   USE_CHECKPOINT: true
 NUM_GPUS: 1
-OUTPUT_DIR: ./outputs/VideoMAEv2_freethrow_mask
+OUTPUT_DIR: ./outputs/VideoMAEv2_freethrow_appearance
 REID:
   EMBED_DIM: 512
   NECK_FEAT: after

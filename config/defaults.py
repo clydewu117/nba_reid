@@ -40,7 +40,7 @@ _C.MODEL.CHECKPOINT_NUM = [0, 0, 8, 0]
 _C.MODEL.ARCH = 'uniformerv2'
 
 # -----------------------------------------------------------------------------
-# VideoMAE
+# VideoMAEv2
 # -----------------------------------------------------------------------------
 _C.VIDEOMAEV2 = CfgNode()
 _C.VIDEOMAEV2.MODEL = 'vit_base_patch16_224'
@@ -49,10 +49,10 @@ _C.VIDEOMAEV2.MODEL_KEY = 'model|module|state_dict'
 _C.VIDEOMAEV2.TUBELET_SIZE = 2
 _C.VIDEOMAEV2.DROP_RATE = 0.0
 _C.VIDEOMAEV2.ATTN_DROP_RATE = 0.0
-_C.VIDEOMAEV2.DROP_PATH_RATE = 0.0
+_C.VIDEOMAEV2.DROP_PATH_RATE = 0.1
 _C.VIDEOMAEV2.HEAD_DROP_RATE = 0.0
 _C.VIDEOMAEV2.USE_MEAN_POOLING = True
-_C.VIDEOMAEV2.INIT_SCALE = 0.0
+_C.VIDEOMAEV2.INIT_SCALE = 0.001
 _C.VIDEOMAEV2.WITH_CHECKPOINT = False
 _C.VIDEOMAEV2.COS_ATTENTION = False
 _C.VIDEOMAEV2.FROZEN = False
