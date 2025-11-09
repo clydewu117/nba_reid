@@ -24,20 +24,38 @@ _C.DATA.TRAIN_RATIO = 0.75  # 训练集比例 75%
 
 # Sampler配置（用于Triplet Loss训练）
 _C.DATA.USE_SAMPLER = True  # 是否使用RandomIdentitySampler
-_C.DATA.NUM_INSTANCES = 4    # 每个identity在batch中的样本数（P*K中的K）
-                             # batch_size必须能被num_instances整除
-                             # 例如: batch_size=64, num_instances=4 → 每个batch有16个不同的identity
+_C.DATA.NUM_INSTANCES = 4   # 每个identity在batch中的样本数（P*K中的K）
+                            # batch_size必须能被num_instances整除
+                            # 例如: batch_size=64, num_instances=4 → 每个batch有16个不同的identity
 
 # -----------------------------------------------------------------------------
 # Model
 # -----------------------------------------------------------------------------
 _C.MODEL = CfgNode()
 _C.MODEL.NAME = 'Uniformerv2ReID'
-_C.MODEL.MODEL_NAME = _C.MODEL.NAME 
+_C.MODEL.MODEL_NAME = _C.MODEL.NAME
 _C.MODEL.NUM_CLASSES = 0  # 自动从数据集获取
 _C.MODEL.USE_CHECKPOINT = True
 _C.MODEL.CHECKPOINT_NUM = [0, 0, 8, 0]
 _C.MODEL.ARCH = 'uniformerv2'
+
+# -----------------------------------------------------------------------------
+# VideoMAE
+# -----------------------------------------------------------------------------
+_C.VIDEOMAEV2 = CfgNode()
+_C.VIDEOMAEV2.MODEL = 'vit_base_patch16_224'
+_C.VIDEOMAEV2.PRETRAIN = '/users/PAS2985/cz2128/ReID/VideoMAEv2/model_zoo/vit_b_k710_dl_from_giant.pth'
+_C.VIDEOMAEV2.MODEL_KEY = 'model|module|state_dict'
+_C.VIDEOMAEV2.TUBELET_SIZE = 2
+_C.VIDEOMAEV2.DROP_RATE = 0.0
+_C.VIDEOMAEV2.ATTN_DROP_RATE = 0.0
+_C.VIDEOMAEV2.DROP_PATH_RATE = 0.0
+_C.VIDEOMAEV2.HEAD_DROP_RATE = 0.0
+_C.VIDEOMAEV2.USE_MEAN_POOLING = True
+_C.VIDEOMAEV2.INIT_SCALE = 0.0
+_C.VIDEOMAEV2.WITH_CHECKPOINT = False
+_C.VIDEOMAEV2.COS_ATTENTION = False
+_C.VIDEOMAEV2.FROZEN = False
 
 # -----------------------------------------------------------------------------
 # UniFormerV2
@@ -115,7 +133,7 @@ _C.TEST.WEIGHT = ''
 _C.OUTPUT_DIR = './outputs/basketball_reid'
 _C.SEED = 42
 _C.GPU_IDS = [0]
-_C.NUM_GPUS = 1 
+_C.NUM_GPUS = 1
 
 
 def get_cfg_defaults():
