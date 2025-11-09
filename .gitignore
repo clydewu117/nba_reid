@@ -1,3 +1,4 @@
 checkpoints/
 outputs/
-inference_outputs/
+inference_output/
+test_results/

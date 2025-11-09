@@ -11,9 +11,9 @@ _C = CfgNode()
 # Data
 # -----------------------------------------------------------------------------
 _C.DATA = CfgNode()
-_C.DATA.ROOT = '/fs/scratch/PAS3184/draft'
+_C.DATA.ROOT = '/fs/scratch/PAS3184/v2'
 _C.DATA.VIDEO_TYPE = 'mask'  # 'appearance' or 'mask'
-_C.DATA.SHOT_TYPE = 'both'  # 'freethrow', '3pt', or 'both'
+_C.DATA.SHOT_TYPE = 'freethrow'  # 'freethrow', '3pt', or 'both'
 _C.DATA.NUM_FRAMES = 16  # 每个视频采样的帧数
 _C.DATA.FRAME_STRIDE = 4  # 帧采样间隔（RRS采样中不使用，保留兼容性）
 _C.DATA.HEIGHT = 224
@@ -61,6 +61,77 @@ _C.UNIFORMERV2.NO_LMHRA = False
 _C.UNIFORMERV2.DOUBLE_LMHRA = True
 
 # -----------------------------------------------------------------------------
+# TimeSformer
+# -----------------------------------------------------------------------------
+_C.TIMESFORMER = CfgNode()
+_C.TIMESFORMER.REPO_PATH = ""  # optional absolute path to local TimeSformer repo
+_C.TIMESFORMER.PRETRAIN = "/users/PAS2099/clydewu117/nba_reid/checkpoints/timesformer/TimeSformer_divST_8x32_224_K400.pyth"  # optional pretrained checkpoint (.pyth / .pth)
+_C.TIMESFORMER.ATTENTION_TYPE = (
+    "divided_space_time"  # 'divided_space_time' | 'space_only' | 'joint_space_time'
+)
+_C.TIMESFORMER.PATCH_SIZE = 16
+_C.TIMESFORMER.DROP_PATH_RATE = 0.1
+_C.TIMESFORMER.EMBED_DIM = 768
+_C.TIMESFORMER.FROZEN = False
+_C.TIMESFORMER.BACKBONE_IMPL = "official"  # force official implementation; local lite impl is disabled
+
+# -----------------------------------------------------------------------------
+# MViT (SlowFast) - minimal knobs for ReID backbone
+# -----------------------------------------------------------------------------
+_C.MVIT = CfgNode()
+_C.MVIT.PRETRAIN = "/users/PAS2099/clydewu117/nba_reid/checkpoints/mvitv2/MViTv2_S_16x4_k400_f302660347.pyth"  # optional SlowFast checkpoint path
+_C.MVIT.FROZEN = False  # freeze backbone
+_C.MVIT.USE_MEAN_POOLING = False  # use mean of patch tokens instead of CLS
+
+# Default MViTv2-S (16x4, 224) backbone config to match SlowFast checkpoints and avoid OOM
+# Reference: SlowFast configs/Kinetics/MVITv2_S_16x4.yaml
+_C.MVIT.MODE = "conv"
+_C.MVIT.CLS_EMBED_ON = True
+_C.MVIT.PATCH_KERNEL = [3, 7, 7]
+_C.MVIT.PATCH_STRIDE = [2, 4, 4]
+_C.MVIT.PATCH_PADDING = [1, 3, 3]
+_C.MVIT.EMBED_DIM = 96
+_C.MVIT.NUM_HEADS = 1
+_C.MVIT.MLP_RATIO = 4.0
+_C.MVIT.QKV_BIAS = True
+_C.MVIT.DROPPATH_RATE = 0.2
+_C.MVIT.DEPTH = 16
+_C.MVIT.NORM = "layernorm"
+_C.MVIT.USE_ABS_POS = False
+_C.MVIT.REL_POS_SPATIAL = True
+_C.MVIT.REL_POS_TEMPORAL = True
+_C.MVIT.SEP_POS_EMBED = False
+_C.MVIT.USE_FIXED_SINCOS_POS = False
+_C.MVIT.DIM_MUL_IN_ATT = True
+_C.MVIT.RESIDUAL_POOLING = True
+
+# Channel/head multipliers across depth to reach 768-dim at final blocks (match pretrained)
+_C.MVIT.DIM_MUL = [[1, 2.0], [3, 2.0], [14, 2.0]]
+_C.MVIT.HEAD_MUL = [[1, 2.0], [3, 2.0], [14, 2.0]]
+
+# Token pooling schedule (critical to control memory and match checkpoint)
+_C.MVIT.POOL_KVQ_KERNEL = [3, 3, 3]
+_C.MVIT.POOL_KV_STRIDE_ADAPTIVE = [1, 8, 8]
+_C.MVIT.POOL_Q_STRIDE = [
+    [0, 1, 1, 1],
+    [1, 1, 2, 2],
+    [2, 1, 1, 1],
+    [3, 1, 2, 2],
+    [4, 1, 1, 1],
+    [5, 1, 1, 1],
+    [6, 1, 1, 1],
+    [7, 1, 1, 1],
+    [8, 1, 1, 1],
+    [9, 1, 1, 1],
+    [10, 1, 1, 1],
+    [11, 1, 1, 1],
+    [12, 1, 1, 1],
+    [13, 1, 1, 1],
+    [14, 1, 2, 2],
+    [15, 1, 1, 1],
+]
+
+# -----------------------------------------------------------------------------
 # ReID
 # -----------------------------------------------------------------------------
 _C.REID = CfgNode()
@@ -72,16 +143,16 @@ _C.REID.EMBED_DIM = 512  # Embedding dimension
 # -----------------------------------------------------------------------------
 _C.SOLVER = CfgNode()
 _C.SOLVER.OPTIMIZER = 'AdamW'
-_C.SOLVER.BASE_LR = 0.00035
+_C.SOLVER.BASE_LR = 0.00001
 _C.SOLVER.WEIGHT_DECAY = 0.0001
 _C.SOLVER.MOMENTUM = 0.9
-_C.SOLVER.MAX_EPOCHS = 120
-_C.SOLVER.WARMUP_EPOCHS = 10
+_C.SOLVER.MAX_EPOCHS = 100
+_C.SOLVER.WARMUP_EPOCHS = 0
 _C.SOLVER.STEPS = [40, 70]
 _C.SOLVER.GAMMA = 0.1
 _C.SOLVER.CHECKPOINT_PERIOD = 10
 _C.SOLVER.EVAL_PERIOD = 10
-_C.SOLVER.LOG_PERIOD = 50
+_C.SOLVER.LOG_PERIOD = 1
 _C.SOLVER.COSINE_END_LR = 1e-6
 _C.SOLVER.COSINE_AFTER_WARMUP = True
 
