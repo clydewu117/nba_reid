@@ -432,7 +432,7 @@ def build_dataloader(cfg, is_train=True):
     # 从config中获取sample_start参数，默认为'beginning'
     sample_start = getattr(cfg.DATA, 'SAMPLE_START', 'beginning')
     
-    # 从config中获取split_sampling参数，默认为False
+    # 从config中获取split_sampling参数，默认为True
     split_sampling = getattr(cfg.DATA, 'SPLIT_SAMPLING', True)
     
     dataset = BasketballVideoDataset(
