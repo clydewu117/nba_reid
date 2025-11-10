@@ -21,7 +21,7 @@ class BasketballVideoDataset(Dataset):
     def __init__(self, root, video_type='appearance', shot_type='both',
                  num_frames=16, frame_stride=4, is_train=True, 
                  train_ratio=0.75, transform=None, seed=42, 
-                 sample_start='beginning'):  # 新增参数
+                 sample_start='beginning', split_sampling=False):  # 新增参数
         self.root = root
         self.video_type = video_type
         self.shot_type = shot_type
@@ -31,6 +31,7 @@ class BasketballVideoDataset(Dataset):
         self.train_ratio = train_ratio
         self.transform = transform
         self.sample_start = sample_start  # 'beginning' or 'middle'
+        self.split_sampling = split_sampling  # 是否使用前后分段采样 (前50%采4帧，后50%采12帧)
         
         # 设置随机种子
         random.seed(seed)
@@ -111,7 +112,10 @@ class BasketballVideoDataset(Dataset):
         split = 'Train' if self.is_train else 'Test'
         print(f"\n{'='*60}")
         print(f"{split} Dataset: {self.video_type} + {self.shot_type}")
-        print(f"Sample Start: {self.sample_start}")  # 新增：显示采样起点
+        print(f"Sample Start: {self.sample_start}")
+        print(f"Split Sampling: {self.split_sampling}")  # 新增：显示分段采样状态
+        if self.split_sampling:
+            print(f"  → First 50%: 4 frames, Last 50%: 12 frames")
         print(f"{'='*60}")
         print(f"Identities: {len(pid_list)}")
         print(f"Videos: {len(data)}")
@@ -167,13 +171,19 @@ class BasketballVideoDataset(Dataset):
         if total_frames == 0:
             raise RuntimeError(f"Video has 0 frames: {video_path}")
         
-        # RRS (Random Resampling Strategy) 采样策略 - TSN风格
-        if self.is_train:
-            # 训练时：分段随机采样
-            indices = self._random_segment_sampling(total_frames, self.num_frames)
+        # 选择采样策略
+        if self.split_sampling:
+            # 使用前后分段采样：前50%采4帧，后50%采12帧
+            if self.is_train:
+                indices = self._split_random_sampling(total_frames)
+            else:
+                indices = self._split_uniform_sampling(total_frames)
         else:
-            # 测试时：分段均匀采样
-            indices = self._uniform_segment_sampling(total_frames, self.num_frames)
+            # 使用原始的RRS采样策略
+            if self.is_train:
+                indices = self._random_segment_sampling(total_frames, self.num_frames)
+            else:
+                indices = self._uniform_segment_sampling(total_frames, self.num_frames)
         
         # 从已读取的帧中采样
         frames = []
@@ -214,6 +224,110 @@ class BasketballVideoDataset(Dataset):
             end_idx = total_frames
         
         return start_idx, end_idx
+    
+    def _split_random_sampling(self, total_frames):
+        """
+        前后分段随机采样（训练用）
+        前50%采4帧，后50%采12帧
+        """
+        # 计算视频中点
+        mid_point = total_frames // 2
+        
+        # 前半部分采4帧
+        first_half_indices = self._random_segment_sampling_range(0, mid_point, num_frames=4)
+        
+        # 后半部分采12帧
+        second_half_indices = self._random_segment_sampling_range(mid_point, total_frames, num_frames=12)
+        
+        # 合并索引（前4帧 + 后12帧 = 16帧）
+        all_indices = first_half_indices + second_half_indices
+        
+        return all_indices
+    
+    def _split_uniform_sampling(self, total_frames):
+        """
+        前后分段均匀采样（测试用）
+        前50%采4帧，后50%采12帧
+        """
+        # 计算视频中点
+        mid_point = total_frames // 2
+        
+        # 前半部分采4帧
+        first_half_indices = self._uniform_segment_sampling_range(0, mid_point, num_frames=4)
+        
+        # 后半部分采12帧
+        second_half_indices = self._uniform_segment_sampling_range(mid_point, total_frames, num_frames=12)
+        
+        # 合并索引
+        all_indices = first_half_indices + second_half_indices
+        
+        return all_indices
+    
+    def _random_segment_sampling_range(self, start_idx, end_idx, num_frames):
+        """
+        在指定范围内进行随机分段采样
+        Args:
+            start_idx: 起始帧索引
+            end_idx: 结束帧索引
+            num_frames: 要采样的帧数
+        Returns:
+            采样的帧索引列表
+        """
+        # 创建索引范围
+        indices = np.arange(start_idx, end_idx)
+        available_frames = len(indices)
+        
+        if available_frames == 0:
+            # 如果范围为空，返回起始索引重复num_frames次
+            return [start_idx] * num_frames
+        
+        # 填充到 num_frames 的倍数
+        num_pads = num_frames - (available_frames % num_frames)
+        if num_pads != num_frames:
+            indices = np.concatenate([indices, np.ones(num_pads, dtype=int) * (end_idx - 1)])
+        
+        # 分成 num_frames 个均等的部分
+        indices_pool = np.array_split(indices, num_frames)
+        
+        # 从每个segment中随机采样一帧
+        sampled_indices = []
+        for segment in indices_pool:
+            sampled_idx = np.random.choice(segment)
+            sampled_indices.append(int(sampled_idx))
+        
+        return sampled_indices
+    
+    def _uniform_segment_sampling_range(self, start_idx, end_idx, num_frames):
+        """
+        在指定范围内进行均匀分段采样
+        Args:
+            start_idx: 起始帧索引
+            end_idx: 结束帧索引
+            num_frames: 要采样的帧数
+        Returns:
+            采样的帧索引列表
+        """
+        # 创建索引范围
+        indices = np.arange(start_idx, end_idx)
+        available_frames = len(indices)
+        
+        if available_frames == 0:
+            return [start_idx] * num_frames
+        
+        # 填充到 num_frames 的倍数
+        num_pads = num_frames - (available_frames % num_frames)
+        if num_pads != num_frames:
+            indices = np.concatenate([indices, np.ones(num_pads, dtype=int) * (end_idx - 1)])
+        
+        # 分成 num_frames 个均等的部分
+        indices_pool = np.array_split(indices, num_frames)
+        
+        # 从每个segment选择第一帧
+        sampled_indices = []
+        for segment in indices_pool:
+            sampled_indices.append(int(segment[0]))
+        
+        return sampled_indices
     
     def _random_segment_sampling(self, total_frames, num_frames):
         """
@@ -316,7 +430,10 @@ def build_dataloader(cfg, is_train=True):
     transform = get_train_transforms(cfg) if is_train else get_test_transforms(cfg)
     
     # 从config中获取sample_start参数，默认为'beginning'
-    sample_start = getattr(cfg.DATA, 'SAMPLE_START', 'middle')
+    sample_start = getattr(cfg.DATA, 'SAMPLE_START', 'beginning')
+    
+    # 从config中获取split_sampling参数，默认为False
+    split_sampling = getattr(cfg.DATA, 'SPLIT_SAMPLING', True)
     
     dataset = BasketballVideoDataset(
         root=cfg.DATA.ROOT,
@@ -328,7 +445,8 @@ def build_dataloader(cfg, is_train=True):
         train_ratio=cfg.DATA.TRAIN_RATIO,
         transform=transform,
         seed=cfg.SEED,
-        sample_start=sample_start  # 新增参数
+        sample_start=sample_start,
+        split_sampling=split_sampling  # 新增参数
     )
     
     # 训练时使用RandomIdentitySampler
