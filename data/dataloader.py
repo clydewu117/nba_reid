@@ -20,7 +20,8 @@ class BasketballVideoDataset(Dataset):
     
     def __init__(self, root, video_type='appearance', shot_type='both',
                  num_frames=16, frame_stride=4, is_train=True, 
-                 train_ratio=0.75, transform=None, seed=42):
+                 train_ratio=0.75, transform=None, seed=42, 
+                 sample_start='beginning'):  # 新增参数
         self.root = root
         self.video_type = video_type
         self.shot_type = shot_type
@@ -29,6 +30,7 @@ class BasketballVideoDataset(Dataset):
         self.is_train = is_train
         self.train_ratio = train_ratio
         self.transform = transform
+        self.sample_start = sample_start  # 'beginning' or 'middle'
         
         # 设置随机种子
         random.seed(seed)
@@ -109,6 +111,7 @@ class BasketballVideoDataset(Dataset):
         split = 'Train' if self.is_train else 'Test'
         print(f"\n{'='*60}")
         print(f"{split} Dataset: {self.video_type} + {self.shot_type}")
+        print(f"Sample Start: {self.sample_start}")  # 新增：显示采样起点
         print(f"{'='*60}")
         print(f"Identities: {len(pid_list)}")
         print(f"Videos: {len(data)}")
@@ -195,6 +198,23 @@ class BasketballVideoDataset(Dataset):
             'shot_type': item['shot_type']
         }
     
+    def _get_sampling_range(self, total_frames):
+        """
+        根据sample_start参数确定采样范围
+        Returns: (start_idx, end_idx)
+        """
+        if self.sample_start == 'middle':
+            # 从中间开始：取后50%的帧
+            start_idx = total_frames // 2
+            end_idx = total_frames
+        else:  # 'beginning'
+            # 从开头开始：取前50%的帧（如果帧数足够的话）
+            # 或者使用全部帧
+            start_idx = 0
+            end_idx = total_frames
+        
+        return start_idx, end_idx
+    
     def _random_segment_sampling(self, total_frames, num_frames):
         """
         RRS: Random Segment Sampling for training (TSN-style)
@@ -202,19 +222,23 @@ class BasketballVideoDataset(Dataset):
         
         优点：保证覆盖整个视频的时间范围
         """
-        # Step 1: 创建索引
-        indices = np.arange(total_frames)
+        # Step 1: 确定采样范围
+        start_idx, end_idx = self._get_sampling_range(total_frames)
         
-        # Step 2: 填充到 num_frames 的倍数
-        num_pads = num_frames - (total_frames % num_frames)
+        # Step 2: 创建采样范围内的索引
+        indices = np.arange(start_idx, end_idx)
+        available_frames = len(indices)
+        
+        # Step 3: 填充到 num_frames 的倍数
+        num_pads = num_frames - (available_frames % num_frames)
         if num_pads != num_frames:  # 只在需要时填充
             # 用最后一帧填充
-            indices = np.concatenate([indices, np.ones(num_pads, dtype=int) * (total_frames - 1)])
+            indices = np.concatenate([indices, np.ones(num_pads, dtype=int) * (end_idx - 1)])
         
-        # Step 3: 分成 num_frames 个均等的部分
+        # Step 4: 分成 num_frames 个均等的部分
         indices_pool = np.array_split(indices, num_frames)
         
-        # Step 4: 从每个segment中随机采样一帧
+        # Step 5: 从每个segment中随机采样一帧
         sampled_indices = []
         for segment in indices_pool:
             # 从当前segment随机选择一个索引
@@ -228,18 +252,22 @@ class BasketballVideoDataset(Dataset):
         Uniform Segment Sampling for testing
         将视频分成num_frames段，从每段选择第一帧（确定性）
         """
-        # Step 1: 创建索引
-        indices = np.arange(total_frames)
+        # Step 1: 确定采样范围
+        start_idx, end_idx = self._get_sampling_range(total_frames)
         
-        # Step 2: 填充到 num_frames 的倍数
-        num_pads = num_frames - (total_frames % num_frames)
+        # Step 2: 创建采样范围内的索引
+        indices = np.arange(start_idx, end_idx)
+        available_frames = len(indices)
+        
+        # Step 3: 填充到 num_frames 的倍数
+        num_pads = num_frames - (available_frames % num_frames)
         if num_pads != num_frames:
-            indices = np.concatenate([indices, np.ones(num_pads, dtype=int) * (total_frames - 1)])
+            indices = np.concatenate([indices, np.ones(num_pads, dtype=int) * (end_idx - 1)])
         
-        # Step 3: 分成 num_frames 个均等的部分
+        # Step 4: 分成 num_frames 个均等的部分
         indices_pool = np.array_split(indices, num_frames)
         
-        # Step 4: 从每个segment选择第一帧（确定性）
+        # Step 5: 从每个segment选择第一帧（确定性）
         sampled_indices = []
         for segment in indices_pool:
             # 选择segment的第一帧
@@ -287,6 +315,9 @@ def build_dataloader(cfg, is_train=True):
     """构建DataLoader"""
     transform = get_train_transforms(cfg) if is_train else get_test_transforms(cfg)
     
+    # 从config中获取sample_start参数，默认为'beginning'
+    sample_start = getattr(cfg.DATA, 'SAMPLE_START', 'middle')
+    
     dataset = BasketballVideoDataset(
         root=cfg.DATA.ROOT,
         video_type=cfg.DATA.VIDEO_TYPE,
@@ -296,7 +327,8 @@ def build_dataloader(cfg, is_train=True):
         is_train=is_train,
         train_ratio=cfg.DATA.TRAIN_RATIO,
         transform=transform,
-        seed=cfg.SEED
+        seed=cfg.SEED,
+        sample_start=sample_start  # 新增参数
     )
     
     # 训练时使用RandomIdentitySampler
