@@ -11,7 +11,7 @@ _C = CfgNode()
 # Data
 # -----------------------------------------------------------------------------
 _C.DATA = CfgNode()
-_C.DATA.ROOT = '/fs/scratch/PAS3184/v2'
+_C.DATA.ROOT = '/fs/scratch/PAS3184/v3'
 _C.DATA.VIDEO_TYPE = 'mask'  # 'appearance' or 'mask'
 _C.DATA.SHOT_TYPE = 'freethrow'  # 'freethrow', '3pt', or 'both'
 _C.DATA.NUM_FRAMES = 16  # 每个视频采样的帧数
