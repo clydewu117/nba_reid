@@ -12,21 +12,21 @@ _C = CfgNode()
 # -----------------------------------------------------------------------------
 _C.DATA = CfgNode()
 _C.DATA.ROOT = '/fs/scratch/PAS3184/v3'
-_C.DATA.VIDEO_TYPE = 'mask'  # 'appearance' or 'mask'
-_C.DATA.SHOT_TYPE = 'freethrow'  # 'freethrow', '3pt', or 'both'
-_C.DATA.NUM_FRAMES = 16  # 每个视频采样的帧数
-_C.DATA.FRAME_STRIDE = 4  # 帧采样间隔（RRS采样中不使用，保留兼容性）
+_C.DATA.VIDEO_TYPE = 'mask'         # 'appearance' or 'mask'
+_C.DATA.SHOT_TYPE = 'freethrow'     # 'freethrow', '3pt', or 'both'
+_C.DATA.NUM_FRAMES = 16             # 每个视频采样的帧数
+_C.DATA.FRAME_STRIDE = 4            # 帧采样间隔（RRS采样中不使用，保留兼容性）
 _C.DATA.HEIGHT = 224
 _C.DATA.WIDTH = 224
-_C.DATA.BATCH_SIZE = 64  # 使用sampler时建议64
+_C.DATA.BATCH_SIZE = 64             # 使用sampler时建议64
 _C.DATA.NUM_WORKERS = 4
-_C.DATA.TRAIN_RATIO = 0.75  # 训练集比例 75%
+_C.DATA.TRAIN_RATIO = 0.7           # 训练集比例 70%
 _C.DATA.SAMPLE_START = 'middle'
 # Sampler配置（用于Triplet Loss训练）
-_C.DATA.USE_SAMPLER = True  # 是否使用RandomIdentitySampler
-_C.DATA.NUM_INSTANCES = 4   # 每个identity在batch中的样本数（P*K中的K）
-                            # batch_size必须能被num_instances整除
-                            # 例如: batch_size=64, num_instances=4 → 每个batch有16个不同的identity
+_C.DATA.USE_SAMPLER = True          # 是否使用RandomIdentitySampler
+_C.DATA.NUM_INSTANCES = 4           # 每个identity在batch中的样本数（P*K中的K）
+                                    # batch_size必须能被num_instances整除
+                                    # 例如: batch_size=64, num_instances=4 → 每个batch有16个不同的identity
 
 # -----------------------------------------------------------------------------
 # Model
@@ -34,7 +34,7 @@ _C.DATA.NUM_INSTANCES = 4   # 每个identity在batch中的样本数（P*K中的K
 _C.MODEL = CfgNode()
 _C.MODEL.NAME = 'Uniformerv2ReID'
 _C.MODEL.MODEL_NAME = _C.MODEL.NAME
-_C.MODEL.NUM_CLASSES = 0  # 自动从数据集获取
+_C.MODEL.NUM_CLASSES = 0            # 自动从数据集获取
 _C.MODEL.USE_CHECKPOINT = True
 _C.MODEL.CHECKPOINT_NUM = [0, 0, 8, 0]
 _C.MODEL.ARCH = 'uniformerv2'
@@ -153,8 +153,8 @@ _C.MVIT.POOL_Q_STRIDE = [
 # ReID
 # -----------------------------------------------------------------------------
 _C.REID = CfgNode()
-_C.REID.NECK_FEAT = 'after'  # 'after' or 'before'
-_C.REID.EMBED_DIM = 512  # Embedding dimension
+_C.REID.NECK_FEAT = 'after'     # 'after' or 'before'
+_C.REID.EMBED_DIM = 512         # Embedding dimension
 
 # -----------------------------------------------------------------------------
 # Solver
