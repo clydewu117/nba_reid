@@ -11,7 +11,7 @@ _C = CfgNode()
 # Data
 # -----------------------------------------------------------------------------
 _C.DATA = CfgNode()
-_C.DATA.ROOT = '/fs/scratch/PAS3184/draft'
+_C.DATA.ROOT = '/fs/scratch/PAS3184/v2'
 _C.DATA.VIDEO_TYPE = 'mask'  # 'appearance' or 'mask'
 _C.DATA.SHOT_TYPE = 'both'  # 'freethrow', '3pt', or 'both'
 _C.DATA.NUM_FRAMES = 16  # 每个视频采样的帧数
@@ -21,7 +21,7 @@ _C.DATA.WIDTH = 224
 _C.DATA.BATCH_SIZE = 64  # 使用sampler时建议64
 _C.DATA.NUM_WORKERS = 4
 _C.DATA.TRAIN_RATIO = 0.75  # 训练集比例 75%
-
+_C.DATA.SAMPLE_START = 'middle'
 # Sampler配置（用于Triplet Loss训练）
 _C.DATA.USE_SAMPLER = True  # 是否使用RandomIdentitySampler
 _C.DATA.NUM_INSTANCES = 4    # 每个identity在batch中的样本数（P*K中的K）
