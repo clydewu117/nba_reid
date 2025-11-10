@@ -364,10 +364,6 @@ def main():
                         help="Batch size for ScoreCAM channel processing (default: 32)")
     parser.add_argument("--finer", action="store_true",
                         help="Enable finer mode: use target class score minus second-highest class score for better discrimination")
-    parser.add_argument("--bn_folding", action="store_true",
-                        help="Enable BN folding: compute score directly from pre-BN features to avoid gradient attenuation through BN layer")
-    parser.add_argument("--train_mode", action="store_true",
-                        help="Use training mode instead of eval mode for stronger gradients (predictions may be less accurate)")
     args = parser.parse_args()
 
     logger.info("="*80)
@@ -406,8 +402,8 @@ def main():
         cam_generator = GradCAMPlusPlus(model, target_layer)
         logger.info("Using GradCAM++ method (second-order gradients)")
     else:
-        cam_generator = SimpleGradCAM(model, target_layer, finer=args.finer, bn_folding=args.bn_folding)
-        logger.info(f"Using GradCAM method{' with FINER mode' if args.finer else ''}{' with BN Folding' if args.bn_folding else ''}")
+        cam_generator = SimpleGradCAM(model, target_layer, finer=args.finer)
+        logger.info(f"Using GradCAM method{' with FINER mode' if args.finer else ''}")
 
     logger.info("Generating CAM...")
 
@@ -423,17 +419,13 @@ def main():
         logger.info(f"Batched input: {tuple(input_tensor_batched.shape)}")
 
     # ============================================================
-    # Model Mode Selection
+    # EVAL MODE - Accurate predictions
     # ============================================================
-    if args.train_mode and not is_gradient_free:
-        model.train()
-        logger.info("Using TRAIN mode (stronger gradients, predictions may be less accurate)")
+    model.eval()
+    if is_gradient_free:
+        logger.info("Using EVAL mode (accurate predictions, gradient-free CAM)")
     else:
-        model.eval()
-        if is_gradient_free:
-            logger.info("Using EVAL mode (accurate predictions, gradient-free CAM)")
-        else:
-            logger.info("Using EVAL mode (accurate predictions, may have weak gradients)")
+        logger.info("Using EVAL mode (accurate predictions, may have weak gradients)")
 
     # Enable gradients only for gradient-based methods
     if not is_gradient_free:
