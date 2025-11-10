@@ -298,9 +298,9 @@ def train(cfg):
     )
 
     # 初始化wandb
-    run_name = f"{cfg.DATA.VIDEO_TYPE}_{cfg.DATA.SHOT_TYPE}_{cfg.OUTPUT_DIR.split('/')[-1]}"
+    run_name = f"{cfg.OUTPUT_DIR.split('/')[-1]}"
     wandb.init(
-        project="basketball-reid", 
+        project="nba-reid", 
         name=run_name,
         config={
             "num_classes": num_classes, 
