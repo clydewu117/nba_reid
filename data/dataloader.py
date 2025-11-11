@@ -21,7 +21,8 @@ class BasketballVideoDataset(Dataset):
     def __init__(self, root, video_type='appearance', shot_type='both',
                  num_frames=16, frame_stride=4, is_train=True, 
                  train_ratio=0.75, transform=None, seed=42, 
-                 sample_start='beginning', split_sampling=False):  # 新增参数
+                 sample_start='beginning', split_sampling=False, 
+                 use_presplit=False):  # 新增参数：使用预先分好的train/test文件夹
         self.root = root
         self.video_type = video_type
         self.shot_type = shot_type
@@ -32,6 +33,7 @@ class BasketballVideoDataset(Dataset):
         self.transform = transform
         self.sample_start = sample_start  # 'beginning' or 'middle'
         self.split_sampling = split_sampling  # 是否使用前后分段采样 (前50%采4帧，后50%采12帧)
+        self.use_presplit = use_presplit  # 是否使用预先分好的train/test文件夹
         
         # 设置随机种子
         random.seed(seed)
@@ -43,6 +45,66 @@ class BasketballVideoDataset(Dataset):
     
     def _load_data(self):
         """加载数据并划分训练/测试集"""
+        if self.use_presplit:
+            # 使用预先分好的train/test文件夹
+            base_path = os.path.join(self.root, self.video_type)
+            
+            # 获取所有identity文件夹
+            identity_folders = sorted([d for d in os.listdir(base_path) 
+                                      if os.path.isdir(os.path.join(base_path, d))])
+            
+            # 创建identity到pid的映射
+            pid_list = [identity.replace('_', ' ') for identity in identity_folders]
+            pid_to_label = {folder: label for label, folder in enumerate(identity_folders)}
+            
+            # 收集数据
+            data = []
+            split_folder = 'train' if self.is_train else 'test'
+            
+            for identity_folder in identity_folders:
+                identity_path = os.path.join(base_path, identity_folder)
+                identity_display = identity_folder.replace('_', ' ')
+                pid = pid_to_label[identity_folder]
+                
+                # 根据shot_type加载对应的视频
+                shot_types_to_load = ['freethrow', '3pt'] if self.shot_type == 'both' else [self.shot_type]
+                
+                for shot_type in shot_types_to_load:
+                    # 路径: root/video_type/identity/shot_type/train(或test)
+                    split_path = os.path.join(identity_path, shot_type, split_folder)
+                    
+                    if not os.path.exists(split_path):
+                        continue
+                    
+                    # 获取视频文件
+                    video_files = sorted([v for v in os.listdir(split_path) 
+                                         if v.endswith(('.mp4', '.MP4', '.avi', '.mov', '.MOV'))])
+                    
+                    for video_file in video_files:
+                        video_path = os.path.join(split_path, video_file)
+                        data.append({
+                            'video_path': video_path,
+                            'pid': pid,
+                            'identity': identity_display,
+                            'shot_type': shot_type
+                        })
+            
+            # 打印基本信息
+            split = 'Train' if self.is_train else 'Test'
+            print(f"\n{'='*60}")
+            print(f"{split} Dataset (Pre-split): {self.video_type} + {self.shot_type}")
+            print(f"Sample Start: {self.sample_start}")
+            print(f"Split Sampling: {self.split_sampling}")
+            if self.split_sampling:
+                print(f"  → First 50%: 4 frames, Last 50%: 12 frames")
+            print(f"{'='*60}")
+            print(f"Identities: {len(pid_list)}")
+            print(f"Videos: {len(data)}")
+            print(f"{'='*60}\n")
+            
+            return data, pid_list
+        
+        # 使用原来的随机划分方式
         base_path = os.path.join(self.root, self.video_type)
         
         # 获取所有identity文件夹
@@ -430,10 +492,13 @@ def build_dataloader(cfg, is_train=True):
     transform = get_train_transforms(cfg) if is_train else get_test_transforms(cfg)
     
     # 从config中获取sample_start参数，默认为'beginning'
-    sample_start = getattr(cfg.DATA, 'SAMPLE_START', 'beginning')
+    sample_start = getattr(cfg.DATA, 'SAMPLE_START', 'middle')
     
-    # 从config中获取split_sampling参数，默认为True
-    split_sampling = getattr(cfg.DATA, 'SPLIT_SAMPLING', True)
+    # 从config中获取split_sampling参数，默认为False
+    split_sampling = getattr(cfg.DATA, 'SPLIT_SAMPLING', False)
+    
+    # 从config中获取use_presplit参数，默认为False
+    use_presplit = getattr(cfg.DATA, 'USE_PRESPLIT', False)
     
     dataset = BasketballVideoDataset(
         root=cfg.DATA.ROOT,
@@ -446,7 +511,8 @@ def build_dataloader(cfg, is_train=True):
         transform=transform,
         seed=cfg.SEED,
         sample_start=sample_start,
-        split_sampling=split_sampling  # 新增参数
+        split_sampling=split_sampling,  # 新增参数
+        use_presplit=use_presplit  # 新增参数
     )
     
     # 训练时使用RandomIdentitySampler
