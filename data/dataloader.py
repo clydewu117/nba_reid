@@ -491,7 +491,7 @@ def build_dataloader(cfg, is_train=True):
     """构建DataLoader"""
     transform = get_train_transforms(cfg) if is_train else get_test_transforms(cfg)
     
-    # 从config中获取sample_start参数，默认为'beginning'
+    # 从config中获取sample_start参数，默认为'middle'
     sample_start = getattr(cfg.DATA, 'SAMPLE_START', 'middle')
     
     # 从config中获取split_sampling参数，默认为False

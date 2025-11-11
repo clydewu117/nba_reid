@@ -21,8 +21,9 @@ _C.DATA.WIDTH = 224
 _C.DATA.BATCH_SIZE = 64             # 使用sampler时建议64
 _C.DATA.NUM_WORKERS = 4
 _C.DATA.TRAIN_RATIO = 0.7           # 训练集比例 70%
-_C.DATA.SAMPLE_START = 'beginning'
-_C.DATA.SPLIT_SAMPLING = True
+_C.DATA.SAMPLE_START = 'middle'
+_C.DATA.SPLIT_SAMPLING = False
+_C.DATA.USE_PRESPLIT = False
 # Sampler配置（用于Triplet Loss训练）
 _C.DATA.USE_SAMPLER = True          # 是否使用RandomIdentitySampler
 _C.DATA.NUM_INSTANCES = 4           # 每个identity在batch中的样本数（P*K中的K）
