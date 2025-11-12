@@ -1,8 +1,6 @@
-<<<<<<< Updated upstream
-=======
 #!/usr/bin/env python3
 """
-UniFormerV2 CAM Visualization - Unified Multi-Method Version
+VideoMAEv2 CAM Visualization - Unified Multi-Method Version
 
 Supports multiple CAM methods with eval mode inference:
 - ✓ Original CAM (gradient-free, default)
@@ -13,19 +11,18 @@ Supports multiple CAM methods with eval mode inference:
 Default: Original CAM (gradient-free, simple, effective)
 """
 
->>>>>>> Stashed changes
 import argparse
-import os
 import sys
 from pathlib import Path
 
 import cv2
 import numpy as np
 import torch
+import yaml
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from models.uniformerv2_reid import Uniformerv2ReID
+from models.videomaev2_reid import VideoMAEv2ReID
 from yacs.config import CfgNode as CN
 import utils.logging as logging
 from cam_util import SimpleGradCAM, ScoreCAM, LayerCAM, GradCAMPlusPlus, OriginalCAM
@@ -34,179 +31,141 @@ logger = logging.get_logger(__name__)
 
 
 def load_config(config_path, num_classes=None):
-    """Load YACS config from file."""
+    """Load YACS config from YAML file."""
+    with open(config_path, 'r') as f:
+        yaml_cfg = yaml.safe_load(f)
+
     cfg = CN()
 
     # Data config
     cfg.DATA = CN()
-    cfg.DATA.BATCH_SIZE = 16
-    cfg.DATA.NUM_FRAMES = 16
-    cfg.DATA.HEIGHT = 224
-    cfg.DATA.WIDTH = 224
-    cfg.DATA.NUM_WORKERS = 4
-    cfg.DATA.FRAME_STRIDE = 4
-    cfg.DATA.NUM_INSTANCES = 4
-    cfg.DATA.ROOT = ""
-    cfg.DATA.SHOT_TYPE = ""
-    cfg.DATA.TRAIN_RATIO = 0.7
-    cfg.DATA.USE_SAMPLER = True
-    cfg.DATA.VIDEO_TYPE = ""
-<<<<<<< Updated upstream
-=======
-    cfg.DATA.SAMPLE_START = "beginning"  # New field: beginning/middle/end
-    cfg.DATA.SPLIT_SAMPLING = False  # New field: split sampling strategy
-    cfg.DATA.USE_PRESPLIT = False  # New field: use pre-split data
->>>>>>> Stashed changes
+    cfg.DATA.BATCH_SIZE = yaml_cfg.get('DATA', {}).get('BATCH_SIZE', 8)
+    cfg.DATA.NUM_FRAMES = yaml_cfg.get('DATA', {}).get('NUM_FRAMES', 16)
+    cfg.DATA.HEIGHT = yaml_cfg.get('DATA', {}).get('HEIGHT', 224)
+    cfg.DATA.WIDTH = yaml_cfg.get('DATA', {}).get('WIDTH', 224)
+    cfg.DATA.NUM_WORKERS = yaml_cfg.get('DATA', {}).get('NUM_WORKERS', 4)
+    cfg.DATA.FRAME_STRIDE = yaml_cfg.get('DATA', {}).get('FRAME_STRIDE', 4)
+    cfg.DATA.NUM_INSTANCES = yaml_cfg.get('DATA', {}).get('NUM_INSTANCES', 4)
+    cfg.DATA.ROOT = yaml_cfg.get('DATA', {}).get('ROOT', '')
+    cfg.DATA.SHOT_TYPE = yaml_cfg.get('DATA', {}).get('SHOT_TYPE', '')
+    cfg.DATA.TRAIN_RATIO = yaml_cfg.get('DATA', {}).get('TRAIN_RATIO', 0.7)
+    cfg.DATA.USE_SAMPLER = yaml_cfg.get('DATA', {}).get('USE_SAMPLER', True)
+    cfg.DATA.VIDEO_TYPE = yaml_cfg.get('DATA', {}).get('VIDEO_TYPE', '')
 
     # Model config
     cfg.MODEL = CN()
-    cfg.MODEL.ARCH = "uniformerv2"
-    cfg.MODEL.MODEL_NAME = "Uniformerv2ReID"
-    cfg.MODEL.NAME = "Uniformerv2ReID"
-    cfg.MODEL.NUM_CLASSES = num_classes if num_classes is not None else 0
-    cfg.MODEL.USE_CHECKPOINT = True
-    cfg.MODEL.CHECKPOINT_NUM = [0]
+    cfg.MODEL.ARCH = yaml_cfg.get('MODEL', {}).get('ARCH', '')
+    cfg.MODEL.MODEL_NAME = yaml_cfg.get('MODEL', {}).get('MODEL_NAME', 'VideoMAEv2ReID')
+    cfg.MODEL.NAME = yaml_cfg.get('MODEL', {}).get('NAME', 'VideoMAEv2ReID')
+    cfg.MODEL.NUM_CLASSES = num_classes if num_classes is not None else yaml_cfg.get('MODEL', {}).get('NUM_CLASSES', 0)
+    cfg.MODEL.USE_CHECKPOINT = yaml_cfg.get('MODEL', {}).get('USE_CHECKPOINT', True)
+    cfg.MODEL.CHECKPOINT_NUM = yaml_cfg.get('MODEL', {}).get('CHECKPOINT_NUM', [0])
 
-    # UniFormerV2 config (12-layer UniFormerV2-B/16)
-    cfg.UNIFORMERV2 = CN()
-    cfg.UNIFORMERV2.BACKBONE = "uniformerv2_b16"
-    cfg.UNIFORMERV2.N_LAYERS = 12  # Fixed: 12 layers for UniFormerV2-B/16
-    cfg.UNIFORMERV2.N_DIM = 768
-    cfg.UNIFORMERV2.N_HEAD = 12
-    cfg.UNIFORMERV2.MLP_FACTOR = 4.0
-    cfg.UNIFORMERV2.BACKBONE_DROP_PATH_RATE = 0.0
-    cfg.UNIFORMERV2.DROP_PATH_RATE = 0.0
-    cfg.UNIFORMERV2.MLP_DROPOUT = [0.5] * 12  # 12 layers
-    cfg.UNIFORMERV2.CLS_DROPOUT = 0.5
-    cfg.UNIFORMERV2.RETURN_LIST = [8, 9, 10, 11]  # Last 4 layers for global attention
-    cfg.UNIFORMERV2.TEMPORAL_DOWNSAMPLE = False
-    cfg.UNIFORMERV2.DW_REDUCTION = 1.5
-    cfg.UNIFORMERV2.NO_LMHRA = False
-    cfg.UNIFORMERV2.DOUBLE_LMHRA = True
-    cfg.UNIFORMERV2.PRETRAIN = ""
-    cfg.UNIFORMERV2.FROZEN = False
+    # VideoMAEv2 config
+    cfg.VIDEOMAEV2 = CN()
+    videomaev2_cfg = yaml_cfg.get('VIDEOMAEV2', {})
+    cfg.VIDEOMAEV2.MODEL = videomaev2_cfg.get('MODEL', 'vit_base_patch16_224')
+    cfg.VIDEOMAEV2.PRETRAIN = videomaev2_cfg.get('PRETRAIN', '')
+    cfg.VIDEOMAEV2.MODEL_KEY = videomaev2_cfg.get('MODEL_KEY', 'model|module|state_dict')
+    cfg.VIDEOMAEV2.TUBELET_SIZE = videomaev2_cfg.get('TUBELET_SIZE', 2)
+    cfg.VIDEOMAEV2.DROP_RATE = videomaev2_cfg.get('DROP_RATE', 0.0)
+    cfg.VIDEOMAEV2.ATTN_DROP_RATE = videomaev2_cfg.get('ATTN_DROP_RATE', 0.0)
+    cfg.VIDEOMAEV2.DROP_PATH_RATE = videomaev2_cfg.get('DROP_PATH_RATE', 0.0)
+    cfg.VIDEOMAEV2.HEAD_DROP_RATE = videomaev2_cfg.get('HEAD_DROP_RATE', 0.0)
+    cfg.VIDEOMAEV2.USE_MEAN_POOLING = videomaev2_cfg.get('USE_MEAN_POOLING', True)
+    cfg.VIDEOMAEV2.INIT_SCALE = videomaev2_cfg.get('INIT_SCALE', 0.0)
+    cfg.VIDEOMAEV2.WITH_CHECKPOINT = videomaev2_cfg.get('WITH_CHECKPOINT', False)
+    cfg.VIDEOMAEV2.COS_ATTENTION = videomaev2_cfg.get('COS_ATTENTION', False)
+    cfg.VIDEOMAEV2.FROZEN = videomaev2_cfg.get('FROZEN', False)
 
     # ReID config
     cfg.REID = CN()
-    cfg.REID.EMBED_DIM = 512
-    cfg.REID.NECK_FEAT = "after"
+    reid_cfg = yaml_cfg.get('REID', {})
+    cfg.REID.EMBED_DIM = reid_cfg.get('EMBED_DIM', 512)
+    cfg.REID.NECK_FEAT = reid_cfg.get('NECK_FEAT', 'after')
 
     # Loss config
     cfg.LOSS = CN()
-    cfg.LOSS.ID_WEIGHT = 1.0
-    cfg.LOSS.TRIPLET_WEIGHT = 1.0
-    cfg.LOSS.TRIPLET_MARGIN = 0.3
-    cfg.LOSS.TRIPLET_DISTANCE = "euclidean"
-    cfg.LOSS.USE_TRIPLET = True
-    cfg.LOSS.USE_LABEL_SMOOTH = True
-    cfg.LOSS.LABEL_SMOOTH_EPSILON = 0.1
+    loss_cfg = yaml_cfg.get('LOSS', {})
+    cfg.LOSS.ID_WEIGHT = loss_cfg.get('ID_WEIGHT', 1.0)
+    cfg.LOSS.TRIPLET_WEIGHT = loss_cfg.get('TRIPLET_WEIGHT', 1.0)
+    cfg.LOSS.TRIPLET_MARGIN = loss_cfg.get('TRIPLET_MARGIN', 0.3)
+    cfg.LOSS.TRIPLET_DISTANCE = loss_cfg.get('TRIPLET_DISTANCE', 'euclidean')
+    cfg.LOSS.USE_TRIPLET = loss_cfg.get('USE_TRIPLET', True)
+    cfg.LOSS.USE_LABEL_SMOOTH = loss_cfg.get('USE_LABEL_SMOOTH', True)
+    cfg.LOSS.LABEL_SMOOTH_EPSILON = loss_cfg.get('LABEL_SMOOTH_EPSILON', 0.1)
 
     # Solver config
     cfg.SOLVER = CN()
-    cfg.SOLVER.BASE_LR = 0.0001
-    cfg.SOLVER.OPTIMIZER = "AdamW"
-    cfg.SOLVER.MOMENTUM = 0.9
-    cfg.SOLVER.WEIGHT_DECAY = 0.05
-    cfg.SOLVER.WARMUP_EPOCHS = 50
-    cfg.SOLVER.MAX_EPOCHS = 100
-    cfg.SOLVER.STEPS = [40, 70]
-    cfg.SOLVER.GAMMA = 0.1
-    cfg.SOLVER.COSINE_AFTER_WARMUP = True
-    cfg.SOLVER.COSINE_END_LR = 1e-6
-    cfg.SOLVER.CHECKPOINT_PERIOD = 10
-    cfg.SOLVER.EVAL_PERIOD = 1
-    cfg.SOLVER.LOG_PERIOD = 1
+    solver_cfg = yaml_cfg.get('SOLVER', {})
+    cfg.SOLVER.BASE_LR = solver_cfg.get('BASE_LR', 0.0001)
+    cfg.SOLVER.OPTIMIZER = solver_cfg.get('OPTIMIZER', 'AdamW')
+    cfg.SOLVER.MOMENTUM = solver_cfg.get('MOMENTUM', 0.9)
+    cfg.SOLVER.WEIGHT_DECAY = solver_cfg.get('WEIGHT_DECAY', 0.05)
+    cfg.SOLVER.MAX_EPOCHS = solver_cfg.get('MAX_EPOCHS', 100)
+    cfg.SOLVER.WARMUP_EPOCHS = solver_cfg.get('WARMUP_EPOCHS', 0)
+    cfg.SOLVER.EVAL_PERIOD = solver_cfg.get('EVAL_PERIOD', 1)
+    cfg.SOLVER.CHECKPOINT_PERIOD = solver_cfg.get('CHECKPOINT_PERIOD', 10)
+    cfg.SOLVER.LOG_PERIOD = solver_cfg.get('LOG_PERIOD', 1)
+    cfg.SOLVER.STEPS = solver_cfg.get('STEPS', [40, 70])
+    cfg.SOLVER.GAMMA = solver_cfg.get('GAMMA', 0.1)
+    cfg.SOLVER.COSINE_AFTER_WARMUP = solver_cfg.get('COSINE_AFTER_WARMUP', True)
+    cfg.SOLVER.COSINE_END_LR = solver_cfg.get('COSINE_END_LR', 1.0e-7)
     cfg.SOLVER.CLIP_GRADIENTS = CN()
-    cfg.SOLVER.CLIP_GRADIENTS.ENABLED = True
-    cfg.SOLVER.CLIP_GRADIENTS.CLIP_VALUE = 1.0
+    clip_grad = solver_cfg.get('CLIP_GRADIENTS', {})
+    cfg.SOLVER.CLIP_GRADIENTS.ENABLED = clip_grad.get('ENABLED', True)
+    cfg.SOLVER.CLIP_GRADIENTS.CLIP_VALUE = clip_grad.get('CLIP_VALUE', 1.0)
 
     # Test config
     cfg.TEST = CN()
-    cfg.TEST.BATCH_SIZE = 16
-    cfg.TEST.WEIGHT = ""
+    test_cfg = yaml_cfg.get('TEST', {})
+    cfg.TEST.BATCH_SIZE = test_cfg.get('BATCH_SIZE', 16)
+    cfg.TEST.WEIGHT = test_cfg.get('WEIGHT', '')
 
     # Other configs
-    cfg.NUM_GPUS = 1
-    cfg.GPU_IDS = [0]
-    cfg.OUTPUT_DIR = ""
-    cfg.SEED = 42
-
-    # Merge from file if exists
-    if config_path and os.path.exists(config_path):
-        cfg.merge_from_file(config_path)
+    cfg.NUM_GPUS = yaml_cfg.get('NUM_GPUS', 1)
+    cfg.GPU_IDS = yaml_cfg.get('GPU_IDS', [0])
+    cfg.OUTPUT_DIR = yaml_cfg.get('OUTPUT_DIR', './outputs')
+    cfg.SEED = yaml_cfg.get('SEED', 42)
 
     cfg.freeze()
     return cfg
 
 
 def load_model(checkpoint_path, config_path, device='cuda'):
-    """Load UniFormerV2 ReID model with config."""
+    """Load VideoMAEv2 ReID model with config."""
     checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
 
-<<<<<<< Updated upstream
     # Infer num_classes from checkpoint
-    state_dict = checkpoint['model_state_dict']
+    state_dict = checkpoint.get('model_state_dict', checkpoint)
     num_classes = None
-    for key in state_dict.keys():
-        if 'classifier.weight' in key:
-            num_classes = state_dict[key].shape[0]
-            logger.info(f"Detected {num_classes} classes from checkpoint")
-=======
-    # Infer num_classes and embed_dim from checkpoint
-    state_dict = checkpoint['model_state_dict']
-    num_classes = None
-    embed_dim = None
 
     for key in state_dict.keys():
         if 'classifier.weight' in key:
             num_classes = state_dict[key].shape[0]
-            embed_dim = state_dict[key].shape[1]
             logger.info(f"Detected {num_classes} classes from checkpoint")
-            logger.info(f"Detected embed_dim={embed_dim} from checkpoint")
->>>>>>> Stashed changes
+            break
+        elif 'reid_head.classifier.weight' in key:
+            num_classes = state_dict[key].shape[0]
+            logger.info(f"Detected {num_classes} classes from checkpoint")
             break
 
     if num_classes is None:
-        logger.warning("Could not infer num_classes from checkpoint, using config default")
+        logger.warning("Could not infer num_classes from checkpoint, using config value")
 
-<<<<<<< Updated upstream
-    # Load config with inferred num_classes
+    # Load config
     cfg = load_config(config_path, num_classes=num_classes)
 
-=======
-    if embed_dim is None:
-        logger.warning("Could not infer embed_dim from checkpoint, using config default")
+    # Build model
+    model = VideoMAEv2ReID(cfg)
 
-    # Load config with inferred num_classes
-    cfg = load_config(config_path, num_classes=num_classes)
-
-    # Override parameters for inference
-    cfg.defrost()
-
-    # Override num_classes if inferred from checkpoint (config may have 0)
-    if num_classes is not None and (cfg.MODEL.NUM_CLASSES == 0 or cfg.MODEL.NUM_CLASSES != num_classes):
-        cfg.MODEL.NUM_CLASSES = num_classes
-        logger.info(f"✓ Overriding config with inferred num_classes={num_classes}")
-
-    # Override embed_dim if inferred from checkpoint (config may have wrong value)
-    if embed_dim is not None and cfg.REID.EMBED_DIM != embed_dim:
-        cfg.REID.EMBED_DIM = embed_dim
-        logger.info(f"✓ Overriding config with inferred embed_dim={embed_dim}")
-
-    # Disable pretrain loading (we're loading from checkpoint, not pretrained backbone)
-    cfg.UNIFORMERV2.PRETRAIN = ""
-
-    cfg.freeze()
-
->>>>>>> Stashed changes
-    # Create model
-    model = Uniformerv2ReID(cfg)
+    # Load state dict
     model.load_state_dict(state_dict, strict=True)
     model = model.to(device)
 
     logger.info(f"✓ Model loaded (epoch {checkpoint.get('epoch', 'NA')}, "
                 f"Rank-1: {checkpoint.get('rank1', float('nan')):.1%})")
-    return model, cfg
+    return model
 
 
 def process_video(video_path, T=16, out_size=224):
@@ -292,69 +251,29 @@ def process_video(video_path, T=16, out_size=224):
     return tensor, frames_224, frames_original  # frames are RGB uint8
 
 
-def reshape_cam_3d(cam_flat, expect_T=8, expect_H=14, expect_W=14):
+def reshape_cam_3d(cam_flat, expect_T=8, expect_H=7, expect_W=7):
     """
     Reshape flat token CAM to [T, H, W] with heuristics and checks.
-    Support multiple models (MViTv2, UniFormerV2, etc.)
     """
     num_tokens = cam_flat.shape[1]
-    
-    # Try multiple expected shapes in order
-    candidate_shapes = [
-        (expect_T, expect_H, expect_W),  # Use provided defaults first
-        (8, 7, 7),    # MViTv2 with 7x7 spatial
-        (8, 14, 14),  # MViTv2 with 14x14 spatial
-        (16, 14, 14), # Full resolution
-        (4, 7, 7),    # Downsampled MViTv2
-    ]
-    
-    T, H, W = None, None, None
-    
-    # First try: exact match with known shapes
-    for t_try, h_try, w_try in candidate_shapes:
-        if num_tokens == t_try * h_try * w_try:
-            T, H, W = t_try, h_try, w_try
-            logger.info(f"Matched known shape: T={T}, H={H}, W={W}")
-            break
-    
-    # Second try: factorize with preferred spatial sizes
-    if T is None:
-        logger.warning(f"Token count {num_tokens} doesn't match known shapes, inferring...")
-        
-        preferred_spatial = [7*7, 14*14, 8*8, 4*4, 16*16]  # Common spatial sizes
-        
-        for spatial_size in preferred_spatial:
-            if num_tokens % spatial_size == 0:
-                T = num_tokens // spatial_size
-                H = W = int(spatial_size ** 0.5)
-                logger.info(f"Inferred with preferred spatial: T={T}, H={H}, W={W}")
-                break
-        
-        # Third try: general factorization (prefer T=8, then powers of 2)
-        if T is None:
-            found = False
-            for T_try in [8, 4, 2, 16, 1]:
-                if num_tokens % T_try == 0:
-                    rem = num_tokens // T_try
-                    # Try to make spatial dimensions square or close to square
-                    H_try = int(round(rem ** 0.5))
-                    for H_candidate in range(H_try, 0, -1):
-                        if rem % H_candidate == 0:
-                            W_candidate = rem // H_candidate
-                            T, H, W = T_try, H_candidate, W_candidate
-                            found = True
-                            break
-                if found:
-                    break
-            
-            if found:
-                logger.info(f"Inferred general factorization: T={T}, H={H}, W={W}")
-            else:
-                raise RuntimeError(f"Cannot factorize {num_tokens} into T*H*W")
-    
-    # Verify the factorization
-    if T * H * W != num_tokens:
-        raise RuntimeError(f"Shape inference error: {T}*{H}*{W}={T*H*W} != {num_tokens}")
+    expected = expect_T * expect_H * expect_W
+    if num_tokens == expected:
+        T, H, W = expect_T, expect_H, expect_W
+    else:
+        logger.warning(f"Token count mismatch: got {num_tokens}, expected {expected}. Trying to infer T,H,W...")
+        # Heuristic: prefer T=8 if divisible by 7*7
+        if num_tokens % (expect_H * expect_W) == 0:
+            T = num_tokens // (expect_H * expect_W)
+            H, W = expect_H, expect_W
+        else:
+            # cube-ish fallback
+            T = int(round(num_tokens ** (1/3)))
+            rem = max(num_tokens // max(T, 1), 1)
+            H = int(round(rem ** 0.5))
+            W = max(rem // max(H, 1), 1)
+            if T * H * W != num_tokens:
+                raise RuntimeError(f"Cannot reshape CAM tokens: {num_tokens} != {T}*{H}*{W}")
+        logger.info(f"Inferred CAM shape: T={T}, H={H}, W={W}")
 
     cam_3d = cam_flat[0].reshape(T, H, W)  # [T, H, W]
     cam_3d = np.maximum(cam_3d, 0)        # safety
@@ -401,7 +320,7 @@ def write_video_from_frames(frames_dir: Path, out_dir: Path, size=(224, 224), fp
 
 
 def main():
-    # Fix random seeds for reproducible results
+    # Fix random seeds for reproducible results (important for Dropout/BatchNorm in training mode)
     import random
     random.seed(42)
     np.random.seed(42)
@@ -413,20 +332,13 @@ def main():
     logging.setup_logging()
 
     parser = argparse.ArgumentParser()
-<<<<<<< Updated upstream
-    parser.add_argument("--video", default="/home/zhang.13617/Desktop/zhang.13617/NBA/mask/Aaron Gordon/freethrow/000.mp4")
-    parser.add_argument("--checkpoint", default="/home/zhang.13617/Desktop/zhang.13617/NBA/ckpt/mask/best_model.pth")
-    parser.add_argument("--config", default="/home/zhang.13617/Desktop/clean/config.yaml")
-=======
-    parser.add_argument("--video", default="/home/zhang.13617/Desktop/zhang.13617/NBA/mask/Aaron Gordon/freethrow/003.mp4")
-    parser.add_argument("--checkpoint", default="/home/zhang.13617/Desktop/zhang.13617/NBA/ckpt/mask/best_model.pth")
-    parser.add_argument("--config", default=None, help="Optional config file path. If not provided, uses default config with auto-inferred parameters from checkpoint")
->>>>>>> Stashed changes
-    parser.add_argument("--output", default="./cam_uniformer_output")
+    parser.add_argument("--video", default="/home/zhang.13617/Desktop/zhang.13617/NBA/app/Aaron Gordon/freethrow/002.mp4")
+    parser.add_argument("--checkpoint", default="/home/zhang.13617/Desktop/zhang.13617/NBA/ckpt/videomaev2_appearance.pth")
+    parser.add_argument("--config", default="/home/zhang.13617/Desktop/clean/config_mae.yaml")
+    parser.add_argument("--output", default="./cam_output")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--target_id", type=int, default=-1, help="Target class id for CAM; -1 means use argmax")
     parser.add_argument("--frames", type=int, default=16, help="Number of frames to sample from video")
-<<<<<<< Updated upstream
     parser.add_argument("--method", type=str, default="originalcam",
                         choices=["originalcam", "gradcam", "gradcam++", "layercam", "scorecam"],
                         help="CAM method to use (default: originalcam - gradient-free, simple, effective)")
@@ -434,30 +346,17 @@ def main():
                         help="Batch size for ScoreCAM channel processing (default: 32)")
     parser.add_argument("--finer", action="store_true",
                         help="Enable finer mode: use target class score minus second-highest class score for better discrimination")
-=======
-    parser.add_argument("--method", type=str, default="scorecam",
-                        choices=["originalcam", "gradcam", "gradcam++", "layercam", "scorecam"],
-                        help="CAM method to use (default: originalcam - gradient-free, simple, effective)")
-    parser.add_argument("--scorecam_batch_size", type=int, default=64,
-                        help="Batch size for ScoreCAM channel processing (default: 32)")
-    parser.add_argument("--finer", action="store_true",
-                        help="Enable finer mode: use target class score minus second-highest class score for better discrimination")
-    parser.add_argument("--bn_folding", action="store_true",
-                        help="Enable BN folding: compute score directly from pre-BN features to avoid gradient attenuation through BN layer")
-    parser.add_argument("--train_mode", action="store_true",
-                        help="Use training mode instead of eval mode for stronger gradients (predictions may be less accurate)")
->>>>>>> Stashed changes
     args = parser.parse_args()
 
     logger.info("="*80)
-    logger.info(f"UniFormerV2 CAM Visualization - Method: {args.method.upper()}")
+    logger.info(f"VideoMAEv2 CAM Visualization - Method: {args.method.upper()}")
     logger.info("="*80)
 
     out_dir = Path(args.output)
     out_dir.mkdir(exist_ok=True, parents=True)
 
     # Load model and video
-    model, cfg = load_model(args.checkpoint, args.config, args.device)
+    model = load_model(args.checkpoint, args.config, args.device)
     input_tensor, frames_224, frames_original = process_video(args.video, T=args.frames, out_size=224)
     input_tensor = input_tensor.to(args.device)
 
@@ -468,9 +367,9 @@ def main():
     logger.info(f"Input tensor: {tuple(input_tensor.shape)}")  # [1, C, T, H, W]
     num_frames = input_tensor.shape[2]
 
-    # Setup CAM on last resblock of backbone transformer
-    # UniFormerV2: model.backbone.transformer.resblocks[-1]
-    target_layer = model.backbone.transformer.resblocks[-1]
+    # Setup CAM on last block
+    # (Adjust here if you want a different layer)
+    target_layer = model.backbone.blocks[-1]
 
     if args.method == "originalcam":
         cam_generator = OriginalCAM(model, target_layer)
@@ -485,13 +384,8 @@ def main():
         cam_generator = GradCAMPlusPlus(model, target_layer)
         logger.info("Using GradCAM++ method (second-order gradients)")
     else:
-<<<<<<< Updated upstream
         cam_generator = SimpleGradCAM(model, target_layer, finer=args.finer)
         logger.info(f"Using GradCAM method{' with FINER mode' if args.finer else ''}")
-=======
-        cam_generator = SimpleGradCAM(model, target_layer, finer=args.finer, bn_folding=args.bn_folding)
-        logger.info(f"Using GradCAM method{' with FINER mode' if args.finer else ''}{' with BN Folding' if args.bn_folding else ''}")
->>>>>>> Stashed changes
 
     logger.info("Generating CAM...")
 
@@ -507,7 +401,6 @@ def main():
         logger.info(f"Batched input: {tuple(input_tensor_batched.shape)}")
 
     # ============================================================
-<<<<<<< Updated upstream
     # EVAL MODE - Accurate predictions
     # ============================================================
     model.eval()
@@ -515,19 +408,6 @@ def main():
         logger.info("Using EVAL mode (accurate predictions, gradient-free CAM)")
     else:
         logger.info("Using EVAL mode (accurate predictions, may have weak gradients)")
-=======
-    # Model Mode Selection
-    # ============================================================
-    if args.train_mode and not is_gradient_free:
-        model.train()
-        logger.info("Using TRAIN mode (stronger gradients, predictions may be less accurate)")
-    else:
-        model.eval()
-        if is_gradient_free:
-            logger.info("Using EVAL mode (accurate predictions, gradient-free CAM)")
-        else:
-            logger.info("Using EVAL mode (accurate predictions, may have weak gradients)")
->>>>>>> Stashed changes
 
     # Enable gradients only for gradient-based methods
     if not is_gradient_free:
@@ -546,19 +426,18 @@ def main():
     logger.info(f"✓ CAM generated: {cam_flat.shape}")
 
     # Reshape flat tokens -> [T, H, W]
-    # For UniFormerV2 with 16-patch and 224x224 input: 14x14 spatial tokens
-    # With temporal_downsample=False and T=16: expect 16x14x14
-    cam_3d = reshape_cam_3d(cam_flat, expect_T=args.frames, expect_H=14, expect_W=14)  # [T,H,W]
+    # Expected layout for late-stage tokens is about 8 x 14 x 14 for VideoMAEv2 (patch size 16, 224//16=14)
+    cam_3d = reshape_cam_3d(cam_flat, expect_T=8, expect_H=14, expect_W=14)  # [T,H,W]
     T_cam, H_cam, W_cam = cam_3d.shape
     logger.info(f"CAM reshaped to: T={T_cam}, H={H_cam}, W={W_cam}")
 
     # Overlay per-time CAM on per-frame image (use original size frames for high-res visualization)
     frames_dir = out_dir / "frames"
-    frames_dir.mkdir(exist_ok=True)
+    frames_dir.mkdir(exist_ok=True, parents=True)
 
     # Create directory for CAM activations (raw numpy arrays)
     cam_dir = out_dir / "cam_activations"
-    cam_dir.mkdir(exist_ok=True)
+    cam_dir.mkdir(exist_ok=True, parents=True)
 
     num_saved = 0
     for t in range(num_frames):

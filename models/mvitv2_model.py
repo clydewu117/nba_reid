@@ -29,9 +29,13 @@ class ReIDHead(nn.Module):
         self.num_classes = num_classes
         self.neck_feat = neck_feat
         self.embed_dim = embed_dim
+        self.in_dim = in_dim
 
-        # Feature projection: in_dim -> embed_dim
-        self.feat_proj = nn.Linear(in_dim, embed_dim)
+        # Feature projection: only if in_dim != embed_dim
+        if in_dim != embed_dim:
+            self.feat_proj = nn.Linear(in_dim, embed_dim)
+        else:
+            self.feat_proj = None
 
         # BNNeck on projected features
         self.bottleneck = nn.BatchNorm1d(embed_dim)
@@ -43,15 +47,19 @@ class ReIDHead(nn.Module):
         self._init_params()
 
     def _init_params(self):
-        nn.init.kaiming_normal_(self.feat_proj.weight, mode="fan_out")
-        nn.init.constant_(self.feat_proj.bias, 0)
+        if self.feat_proj is not None:
+            nn.init.kaiming_normal_(self.feat_proj.weight, mode="fan_out")
+            nn.init.constant_(self.feat_proj.bias, 0)
         nn.init.constant_(self.bottleneck.weight, 1)
         nn.init.constant_(self.bottleneck.bias, 0)
         nn.init.normal_(self.classifier.weight, std=0.001)
 
     def forward(self, features: torch.Tensor, label=None):
-        # Project to embed_dim
-        feat_proj = self.feat_proj(features)  # [B, in_dim] -> [B, embed_dim]
+        # Project to embed_dim if needed
+        if self.feat_proj is not None:
+            feat_proj = self.feat_proj(features)  # [B, in_dim] -> [B, embed_dim]
+        else:
+            feat_proj = features
 
         # BNNeck
         bn_feat = self.bottleneck(feat_proj)
