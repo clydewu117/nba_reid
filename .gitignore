@@ -2,6 +2,7 @@ checkpoints/
 outputs/
 inference_outputs/
 slurm_output/
+scripts/
 
 train_test.sh
 
