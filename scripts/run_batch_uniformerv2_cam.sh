@@ -15,7 +15,7 @@ set -x
 
 CSV_PATH=/fs/scratch/PAS3184/v3/train_test_split.csv
 CONFIG_PATH=/users/PAS2985/cz2128/ReID/nba_reid-cam/configs/config_uniformerv2.yaml
-OUTPUT_ROOT=/fs/scratch/PAS3184/v3_cam_uniformer
+OUTPUT_ROOT=/fs/scratch/PAS3184/v3_cam
 MODEL_NAME=UniFormerV2
 CHECKPOINTS="\
   /path/to/uniformer_checkpoint1.pth \

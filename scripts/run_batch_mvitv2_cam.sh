@@ -14,7 +14,7 @@
 set -x
 
 CSV_PATH=/fs/scratch/PAS3184/v3/train_test_split.csv
-OUTPUT_ROOT=/fs/scratch/PAS3184/v3_cam_mvit
+OUTPUT_ROOT=/fs/scratch/PAS3184/v3_cam
 MODEL_NAME=MViTv2
 CHECKPOINTS="\
   /path/to/mvit_checkpoint1.pth \
