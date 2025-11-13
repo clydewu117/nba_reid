@@ -9,23 +9,23 @@
 # GPU selection parameter (default: 0)
 GPU_ID=${1:-0}
 
-BASE_DIR="/fs/scratch/PAS3184/v3/appearance"
-SCRIPT_DIR="/users/PAS2099/clydewu117/nba_reid"
-OUTPUT_BASE="/fs/scratch/PAS3184/baicheng_cam"
+BASE_DIR="/home/zhang.13617/Desktop/zhang.13617/NBA/app"
+SCRIPT_DIR="/home/zhang.13617/Desktop/clean"
+OUTPUT_BASE="/home/zhang.13617/Desktop/zhang.13617/NBA/mvit"
 
 # Set GPU device
 export CUDA_VISIBLE_DEVICES=$GPU_ID
 
 # List of 3 checkpoints for testing
 CHECKPOINTS=(
-    "/fs/scratch/PAS3184/baicheng_ckpt/new2/appearance_k400_16frames_beginning_nosplitsampling_drop02/best_model.pth"
-    "/fs/scratch/PAS3184/baicheng_ckpt/new2/appearance_k400_16frames_beginning_splitsampling_drop02/best_model.pth"
+    "/home/zhang.13617/Desktop/zhang.13617/NBA/ckpt/new/new/appearance_k400_16frames_beginning_splitsampling/best_model.pth"
+    "/home/zhang.13617/Desktop/zhang.13617/NBA/ckpt/new/new/appearance_k400_16frames_middle_nosplitsampling/best_model.pth"
 )
 
 # Checkpoint names for output directories
 CHECKPOINT_NAMES=(
-    "appearance_k400_16frames_beginning_nosplitsampling_drop02"
-    "appearance_k400_16frames_beginning_splitsampling_drop02"
+    "appearance_k400_16frames_beginning_splitsampling"
+    "appearance_k400_16frames_middle_nosplitsampling"
 )
 
 # List of 5 players for testing
