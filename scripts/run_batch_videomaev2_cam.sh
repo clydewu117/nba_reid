@@ -29,5 +29,6 @@ python batch_videomaev2_cam.py \
   --output-root "$OUTPUT_ROOT" \
   --model-name "$MODEL_NAME" \
   --sampling uniform \
+  --modality appearance \
   --methods originalcam scorecam \
   --checkpoints $CHECKPOINTS

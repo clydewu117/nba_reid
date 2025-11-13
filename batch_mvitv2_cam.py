@@ -51,7 +51,6 @@ SAMPLING_MODE_MAP = {
     "uniform": "uniform_segments",
 }
 
-
 def set_deterministic(seed: int = 42) -> None:
     random.seed(seed)
     np.random.seed(seed)
@@ -313,7 +312,6 @@ def process_video_entry(
 
     video_root = (
         output_checkpoint_root
-        / entry.get("video_type", "unknown")
         / entry.get("identity_folder", entry.get("identity_display", "unknown"))
         / Path(entry.get("filename", video_path.stem)).stem
     )
@@ -422,6 +420,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sampling", nargs="+", default=["uniform"],
                         choices=["random", "uniform"],
                         help="Sampling strategy(ies) to use per clip (default: random uniform)")
+    parser.add_argument("--modality", choices=["appearance", "mask"], default="appearance",
+                        help="Select appearance or mask")
     parser.add_argument("--frames", type=int, default=16, help="Number of frames sampled per clip")
     parser.add_argument("--target-id", type=int, default=-1, help="Target class ID for CAM; -1 uses argmax")
     parser.add_argument("--scorecam-batch-size", type=int, default=64,
@@ -471,6 +471,8 @@ def main() -> None:
     entries = filter_entries(csv_rows, args.video_type, args.shot_type)
     if args.limit is not None:
         entries = entries[: args.limit]
+
+    entries = [row for row in entries if row.get("video_type") == args.modality]
 
     if not entries:
         logger.warning("No test entries matched the provided filters.")
