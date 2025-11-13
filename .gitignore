@@ -1,4 +1,5 @@
 # Byte-compiled / optimized / DLL files
+__pycache__/
 *.py[cod]
 *$py.class
 
@@ -125,19 +126,9 @@ venv.bak/
 dmypy.json
 
 # Pyre type checker
-.pyre/
+.pyre/__pycache__/
+*.pyc
 
-# Custom
-slurm_output/
+outputs/
 
-__pycache__/
-cam_util/__pycache__/
-models/__pycache__/
-utils/__pycache__/
-
-slowfast/__pycache__/
-slowfast/configs/__pycache__/
-slowfast/datasets/__pycache__/
-slowfast/models/__pycache__/
-slowfast/utils/__pycache__/
-slowfast/visualization/__pycache__/
+checkpoints/

@@ -1,10 +1,8 @@
 #!/bin/bash
 
 # CAM batch processing for NBA videos
-# Processes 5 players, 3 videos each (freethrow), 3 checkpoints, 2 CAM methods
+# Only process videos where split=test from CSV
 # Usage: ./mvit_app.sh [GPU_ID]
-# Example: ./mvit_app.sh 0  (use GPU 0)
-#          ./mvit_app.sh     (use default GPU 0)
 
 # GPU selection parameter (default: 0)
 GPU_ID=${1:-0}
@@ -13,53 +11,51 @@ BASE_DIR="/fs/scratch/PAS3184/v3/appearance"
 SCRIPT_DIR="/users/PAS2099/clydewu117/nba_reid"
 OUTPUT_BASE="/fs/scratch/PAS3184/baicheng_cam"
 
-# Set GPU device
+# NEW: CSV containing split info
+CSV_FILE="/fs/scratch/PAS3184/v3/train_test_split.csv"
+
+# Set GPU
 export CUDA_VISIBLE_DEVICES=$GPU_ID
 
-# List of 3 checkpoints for testing
+# Checkpoints
 CHECKPOINTS=(
     "/fs/scratch/PAS3184/baicheng_ckpt/new2/mask_k400_16frames_beginning_nosplitsampling_drop02/best_model.pth"
     "/fs/scratch/PAS3184/baicheng_ckpt/new2/mask_k400_16frames_beginning_splitsampling_drop02/best_model.pth"
 )
 
-# Checkpoint names for output directories
 CHECKPOINT_NAMES=(
     "mask_k400_16frames_beginning_nosplitsampling_drop02"
     "mask_k400_16frames_beginning_splitsampling_drop02"
 )
 
-# List of 5 players for testing
-PLAYERS=(
-    "Aaron Gordon"
-    "Alex_Caruso"
-    "Al_Horford"
-)
+# NEW: read PLAYERS from CSV (only split=test)
+mapfile -t PLAYERS < <(awk -F',' '$1=="test" {print $3}' "$CSV_FILE" | sort -u)
 
-# CAM methods to test
-# Method 1: OriginalCAM
-# Method 2: ScoreCAM
+# NEW: read VIDEOS from CSV (only split=test)
+mapfile -t TEST_VIDEO_PATHS < <(awk -F',' '$1=="test" {print $6}' "$CSV_FILE")
+
+# CAM methods
 CAM_METHODS=("originalcam" "scorecam")
 
 echo "=========================================="
-echo "CAM Batch Processing - Multiple Checkpoints"
+echo "CAM Batch Processing - Test Split Only"
 echo "GPU: $GPU_ID (CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES)"
 echo "Checkpoints: ${#CHECKPOINTS[@]}"
-echo "Players: ${#PLAYERS[@]}"
-echo "Videos per player: 3"
+echo "Players(test): ${#PLAYERS[@]}"
+echo "Videos(test): ${#TEST_VIDEO_PATHS[@]}"
 echo "CAM methods: ${#CAM_METHODS[@]} (originalcam, scorecam)"
 echo "Output: $OUTPUT_BASE"
 echo "=========================================="
 echo ""
 
-# Create output base directory if it doesn't exist
 mkdir -p "$OUTPUT_BASE"
 
-# Counter for total processed videos
+# counters
 total_runs=0
 success_count=0
 fail_count=0
 
-# Loop through each checkpoint
+# Loop checkpoints
 for ckpt_idx in "${!CHECKPOINTS[@]}"; do
     CHECKPOINT="${CHECKPOINTS[$ckpt_idx]}"
     CHECKPOINT_NAME="${CHECKPOINT_NAMES[$ckpt_idx]}"
@@ -68,54 +64,42 @@ for ckpt_idx in "${!CHECKPOINTS[@]}"; do
     echo "CHECKPOINT [$((ckpt_idx+1))/${#CHECKPOINTS[@]}]: $CHECKPOINT_NAME"
     echo "========================================"
 
-    # Check if checkpoint exists
     if [ ! -f "$CHECKPOINT" ]; then
         echo "ERROR: Checkpoint not found: $CHECKPOINT"
-        echo "Skipping this checkpoint"
+        echo "Skipping..."
         echo ""
         continue
     fi
 
-    # Create output directory for this checkpoint
     CHECKPOINT_OUTPUT_DIR="$OUTPUT_BASE/$CHECKPOINT_NAME"
     mkdir -p "$CHECKPOINT_OUTPUT_DIR"
 
-    # Loop through each player
+    # Loop players
     for player in "${PLAYERS[@]}"; do
         echo "----------------------------------------"
         echo "Processing player: $player"
         echo "----------------------------------------"
 
         PLAYER_DIR="$BASE_DIR/$player/freethrow"
-
-        # Check if player directory exists
-        if [ ! -d "$PLAYER_DIR" ]; then
-            echo "WARNING: Directory not found: $PLAYER_DIR"
-            echo "Skipping $player"
-            echo ""
-            continue
-        fi
-
-        # Create output directory for this player
         PLAYER_OUTPUT_DIR="$CHECKPOINT_OUTPUT_DIR/$player"
         mkdir -p "$PLAYER_OUTPUT_DIR"
 
-        # Process 3 videos (000.mp4 to 002.mp4)
-        for i in {0..2}; do
-            VIDEO_NUM=$(printf "%03d" $i)
-            VIDEO_PATH="$PLAYER_DIR/${VIDEO_NUM}.mp4"
+        # NEW: loop all test video paths belonging to this player
+        for VIDEO_PATH in "${TEST_VIDEO_PATHS[@]}"; do
 
-            # Check if video exists
-            if [ ! -f "$VIDEO_PATH" ]; then
-                echo "  WARNING: Video not found: $VIDEO_PATH"
+            # Filter video-paths by the player name
+            if [[ "$VIDEO_PATH" != *"/$player/"* ]]; then
                 continue
             fi
 
-            echo "  Video [${i}/2]: $VIDEO_PATH"
+            # Extract video number
+            VIDEO_NAME=$(basename "$VIDEO_PATH")
+            VIDEO_NUM="${VIDEO_NAME%.*}"
 
-            # Loop through each CAM method
+            echo "  Test Video: $VIDEO_PATH"
+
+            # Loop CAM methods
             for method in "${CAM_METHODS[@]}"; do
-                # Determine method parameters
                 if [ "$method" == "originalcam" ]; then
                     METHOD_FLAG="originalcam"
                     EXTRA_FLAGS=""
@@ -130,12 +114,10 @@ for ckpt_idx in "${!CHECKPOINTS[@]}"; do
                     METHOD_NAME="scorecam_finer"
                 fi
 
-                # Create output directory for this specific video and method
                 OUTPUT_DIR="$PLAYER_OUTPUT_DIR/video_${VIDEO_NUM}_${METHOD_NAME}"
 
                 echo "    Method: $METHOD_NAME"
 
-                # Run the CAM script
                 python3 "$SCRIPT_DIR/run_gradcam_mvit.py" \
                     --video "$VIDEO_PATH" \
                     --checkpoint "$CHECKPOINT" \
@@ -155,6 +137,7 @@ for ckpt_idx in "${!CHECKPOINTS[@]}"; do
 
                 ((total_runs++))
             done
+
             echo ""
         done
 
@@ -169,7 +152,7 @@ done
 echo "=========================================="
 echo "Batch processing complete!"
 echo "=========================================="
-echo "Total runs: $total_runs (3 checkpoints × 5 players × 3 videos × 2 methods = 90 runs)"
+echo "Total runs: $total_runs"
 echo "  Success: $success_count"
 echo "  Failed: $fail_count"
 echo "Output directory: $OUTPUT_BASE"
