@@ -279,7 +279,35 @@ def ensure_metadata(video_root: Path, meta: Dict[str, object]) -> None:
 
 
 def checkpoint_slug(path: Path) -> str:
-    return path.stem if path.suffix else path.name
+    """Return a filesystem-safe slug for a checkpoint path.
+
+    Requirement: completely drop the filename like "best_model.pth" from the
+    output folder naming. We therefore use only the immediate parent directory
+    name as the slug, which distinguishes checkpoints living in different
+    experiment folders.
+
+    Fallback: if parent is missing, use the stem; if the stem equals
+    "best_model", fall back to the grandparent name or a generic "checkpoint".
+    """
+    stem = path.stem if path.suffix else path.name
+    parent_name = path.parent.name if path.parent is not None else ""
+    if parent_name:
+        base = parent_name
+    else:
+        # no parent; avoid returning a meaningless "best_model"
+        if stem and stem.lower() != "best_model":
+            base = stem
+        else:
+            gp = path.parent.parent.name if path.parent and path.parent.parent else ""
+            base = gp or "checkpoint"
+
+    # Replace any problematic characters just in case
+    safe = (
+        base.replace("/", "_")
+        .replace("\\", "_")
+        .replace(" ", "_")
+    )
+    return safe
 
 
 def process_video_entry(

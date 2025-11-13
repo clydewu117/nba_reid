@@ -20,13 +20,11 @@ export CUDA_VISIBLE_DEVICES=$GPU_ID
 # List of checkpoints (保持原样)
 CHECKPOINTS=(
     "/fs/scratch/PAS3184/baicheng_ckpt/new2/appearance_k400_16frames_beginning_nosplitsampling_drop02/best_model.pth"
-    "/fs/scratch/PAS3184/baicheng_ckpt/new2/appearance_k400_16frames_beginning_splitsampling_drop02/best_model.pth"
     "/fs/scratch/PAS3184/baicheng_ckpt/new2/color_appearance_k400_16frames_beginning_nosplitsampling_drop03/best_model.pth"
 )
 
 CHECKPOINT_NAMES=(
     "appearance_k400_16frames_beginning_nosplitsampling_drop02"
-    "appearance_k400_16frames_beginning_splitsampling_drop02"
     "color_appearance_k400_16frames_beginning_nosplitsampling_drop03"
 )
 
