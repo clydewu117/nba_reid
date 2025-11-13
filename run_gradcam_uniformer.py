@@ -1,5 +1,3 @@
-<<<<<<< Updated upstream
-=======
 #!/usr/bin/env python3
 """
 UniFormerV2 CAM Visualization - Unified Multi-Method Version
@@ -13,7 +11,6 @@ Supports multiple CAM methods with eval mode inference:
 Default: Original CAM (gradient-free, simple, effective)
 """
 
->>>>>>> Stashed changes
 import argparse
 import os
 import sys
@@ -51,12 +48,9 @@ def load_config(config_path, num_classes=None):
     cfg.DATA.TRAIN_RATIO = 0.7
     cfg.DATA.USE_SAMPLER = True
     cfg.DATA.VIDEO_TYPE = ""
-<<<<<<< Updated upstream
-=======
     cfg.DATA.SAMPLE_START = "beginning"  # New field: beginning/middle/end
     cfg.DATA.SPLIT_SAMPLING = False  # New field: split sampling strategy
     cfg.DATA.USE_PRESPLIT = False  # New field: use pre-split data
->>>>>>> Stashed changes
 
     # Model config
     cfg.MODEL = CN()
@@ -143,15 +137,6 @@ def load_model(checkpoint_path, config_path, device='cuda'):
     """Load UniFormerV2 ReID model with config."""
     checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
 
-<<<<<<< Updated upstream
-    # Infer num_classes from checkpoint
-    state_dict = checkpoint['model_state_dict']
-    num_classes = None
-    for key in state_dict.keys():
-        if 'classifier.weight' in key:
-            num_classes = state_dict[key].shape[0]
-            logger.info(f"Detected {num_classes} classes from checkpoint")
-=======
     # Infer num_classes and embed_dim from checkpoint
     state_dict = checkpoint['model_state_dict']
     num_classes = None
@@ -163,17 +148,11 @@ def load_model(checkpoint_path, config_path, device='cuda'):
             embed_dim = state_dict[key].shape[1]
             logger.info(f"Detected {num_classes} classes from checkpoint")
             logger.info(f"Detected embed_dim={embed_dim} from checkpoint")
->>>>>>> Stashed changes
             break
 
     if num_classes is None:
         logger.warning("Could not infer num_classes from checkpoint, using config default")
 
-<<<<<<< Updated upstream
-    # Load config with inferred num_classes
-    cfg = load_config(config_path, num_classes=num_classes)
-
-=======
     if embed_dim is None:
         logger.warning("Could not infer embed_dim from checkpoint, using config default")
 
@@ -197,8 +176,6 @@ def load_model(checkpoint_path, config_path, device='cuda'):
     cfg.UNIFORMERV2.PRETRAIN = ""
 
     cfg.freeze()
-
->>>>>>> Stashed changes
     # Create model
     model = Uniformerv2ReID(cfg)
     model.load_state_dict(state_dict, strict=True)
@@ -413,20 +390,16 @@ def main():
     logging.setup_logging()
 
     parser = argparse.ArgumentParser()
-<<<<<<< Updated upstream
-    parser.add_argument("--video", default="/home/zhang.13617/Desktop/zhang.13617/NBA/mask/Aaron Gordon/freethrow/000.mp4")
-    parser.add_argument("--checkpoint", default="/home/zhang.13617/Desktop/zhang.13617/NBA/ckpt/mask/best_model.pth")
-    parser.add_argument("--config", default="/home/zhang.13617/Desktop/clean/config.yaml")
-=======
-    parser.add_argument("--video", default="/home/zhang.13617/Desktop/zhang.13617/NBA/mask/Aaron Gordon/freethrow/003.mp4")
-    parser.add_argument("--checkpoint", default="/home/zhang.13617/Desktop/zhang.13617/NBA/ckpt/mask/best_model.pth")
-    parser.add_argument("--config", default=None, help="Optional config file path. If not provided, uses default config with auto-inferred parameters from checkpoint")
->>>>>>> Stashed changes
+    parser.add_argument("--video", default="/home/zhang.13617/Desktop/zhang.13617/NBA/mask/Aaron Gordon/freethrow/003.mp4",
+                        help="Video path to process")
+    parser.add_argument("--checkpoint", default="/home/zhang.13617/Desktop/zhang.13617/NBA/ckpt/mask/best_model.pth",
+                        help="Checkpoint path for UniFormerV2 model")
+    parser.add_argument("--config", default=None,
+                        help="Optional config file path. If omitted, default config is used with parameters inferred from checkpoint")
     parser.add_argument("--output", default="./cam_uniformer_output")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--target_id", type=int, default=-1, help="Target class id for CAM; -1 means use argmax")
     parser.add_argument("--frames", type=int, default=16, help="Number of frames to sample from video")
-<<<<<<< Updated upstream
     parser.add_argument("--method", type=str, default="originalcam",
                         choices=["originalcam", "gradcam", "gradcam++", "layercam", "scorecam"],
                         help="CAM method to use (default: originalcam - gradient-free, simple, effective)")
@@ -434,19 +407,10 @@ def main():
                         help="Batch size for ScoreCAM channel processing (default: 32)")
     parser.add_argument("--finer", action="store_true",
                         help="Enable finer mode: use target class score minus second-highest class score for better discrimination")
-=======
-    parser.add_argument("--method", type=str, default="scorecam",
-                        choices=["originalcam", "gradcam", "gradcam++", "layercam", "scorecam"],
-                        help="CAM method to use (default: originalcam - gradient-free, simple, effective)")
-    parser.add_argument("--scorecam_batch_size", type=int, default=64,
-                        help="Batch size for ScoreCAM channel processing (default: 32)")
-    parser.add_argument("--finer", action="store_true",
-                        help="Enable finer mode: use target class score minus second-highest class score for better discrimination")
     parser.add_argument("--bn_folding", action="store_true",
                         help="Enable BN folding: compute score directly from pre-BN features to avoid gradient attenuation through BN layer")
     parser.add_argument("--train_mode", action="store_true",
                         help="Use training mode instead of eval mode for stronger gradients (predictions may be less accurate)")
->>>>>>> Stashed changes
     args = parser.parse_args()
 
     logger.info("="*80)
@@ -484,14 +448,11 @@ def main():
     elif args.method == "gradcam++":
         cam_generator = GradCAMPlusPlus(model, target_layer)
         logger.info("Using GradCAM++ method (second-order gradients)")
-    else:
-<<<<<<< Updated upstream
-        cam_generator = SimpleGradCAM(model, target_layer, finer=args.finer)
-        logger.info(f"Using GradCAM method{' with FINER mode' if args.finer else ''}")
-=======
         cam_generator = SimpleGradCAM(model, target_layer, finer=args.finer, bn_folding=args.bn_folding)
         logger.info(f"Using GradCAM method{' with FINER mode' if args.finer else ''}{' with BN Folding' if args.bn_folding else ''}")
->>>>>>> Stashed changes
+    else:
+        cam_generator = SimpleGradCAM(model, target_layer, finer=args.finer, bn_folding=args.bn_folding)
+        logger.info(f"Using GradCAM method{' with FINER mode' if args.finer else ''}{' with BN Folding' if args.bn_folding else ''}")
 
     logger.info("Generating CAM...")
 
@@ -507,15 +468,6 @@ def main():
         logger.info(f"Batched input: {tuple(input_tensor_batched.shape)}")
 
     # ============================================================
-<<<<<<< Updated upstream
-    # EVAL MODE - Accurate predictions
-    # ============================================================
-    model.eval()
-    if is_gradient_free:
-        logger.info("Using EVAL mode (accurate predictions, gradient-free CAM)")
-    else:
-        logger.info("Using EVAL mode (accurate predictions, may have weak gradients)")
-=======
     # Model Mode Selection
     # ============================================================
     if args.train_mode and not is_gradient_free:
@@ -527,7 +479,6 @@ def main():
             logger.info("Using EVAL mode (accurate predictions, gradient-free CAM)")
         else:
             logger.info("Using EVAL mode (accurate predictions, may have weak gradients)")
->>>>>>> Stashed changes
 
     # Enable gradients only for gradient-based methods
     if not is_gradient_free:

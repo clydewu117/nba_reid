@@ -62,11 +62,7 @@ class OriginalCAM:
         """
         self.spatial_features = None
 
-<<<<<<< Updated upstream
-        # Forward pass (no gradients needed!)
-=======
         # Forward pass in eval mode (no gradients needed!)
->>>>>>> Stashed changes
         with torch.no_grad():
             output = self.model(input_tensor)
 
@@ -79,17 +75,12 @@ class OriginalCAM:
             else:
                 logger.error("[OriginalCAM] No 'cls_score' in model output!")
                 return None
-<<<<<<< Updated upstream
-        else:
-            logger.error("[OriginalCAM] Model output is not a dict!")
-=======
         elif isinstance(output, tuple) and len(output) >= 1:
             # Handle tuple output (cls_score, bn_feat, feat)
             logits = output[0]
             logger.info(f"[OriginalCAM] Model output (tuple[0]) shape: {logits.shape}")
         else:
             logger.error(f"[OriginalCAM] Model output is not a dict or tuple! Type: {type(output)}")
->>>>>>> Stashed changes
             return None
 
         if self.spatial_features is None:

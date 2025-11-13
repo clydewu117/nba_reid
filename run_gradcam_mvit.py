@@ -1,5 +1,3 @@
-<<<<<<< Updated upstream
-=======
 #!/usr/bin/env python3
 """
 MViT CAM Visualization - Unified Multi-Method Version
@@ -13,7 +11,6 @@ Supports multiple CAM methods with eval mode inference:
 Default: Original CAM (gradient-free, simple, effective)
 """
 
->>>>>>> Stashed changes
 import argparse
 import os
 import sys
@@ -39,15 +36,6 @@ def load_model(checkpoint_path, device='cuda'):
     """Load MViTv2 ReID model with config."""
     checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
 
-<<<<<<< Updated upstream
-    # Infer num_classes from checkpoint
-    state_dict = checkpoint['model_state_dict']
-    num_classes = None
-    for key in state_dict.keys():
-        if 'classifier.weight' in key:
-            num_classes = state_dict[key].shape[0]
-            logger.info(f"Detected {num_classes} classes from checkpoint")
-=======
     # Infer num_classes and embed_dim from checkpoint
     state_dict = checkpoint['model_state_dict']
     num_classes = None
@@ -59,20 +47,16 @@ def load_model(checkpoint_path, device='cuda'):
             embed_dim = state_dict[key].shape[1]
             logger.info(f"Detected {num_classes} classes from checkpoint")
             logger.info(f"Detected embed_dim={embed_dim} from checkpoint")
->>>>>>> Stashed changes
             break
 
     if num_classes is None:
         logger.warning("Could not infer num_classes from checkpoint, using default 99")
         num_classes = 99
 
-<<<<<<< Updated upstream
-=======
     if embed_dim is None:
         logger.warning("Could not infer embed_dim from checkpoint, using default 512")
         embed_dim = 512
 
->>>>>>> Stashed changes
     cfg = sf_get_cfg()
     cfg.MODEL.ARCH = "mvit"
     cfg.MODEL.MODEL_NAME = "MViT"
@@ -116,11 +100,7 @@ def load_model(checkpoint_path, device='cuda'):
     ]
 
     cfg.REID = CfgNode()
-<<<<<<< Updated upstream
-    cfg.REID.EMBED_DIM = 512
-=======
     cfg.REID.EMBED_DIM = embed_dim
->>>>>>> Stashed changes
     cfg.REID.NECK_FEAT = "after"
     cfg.MVIT.PRETRAIN = ""
     cfg.MVIT.FROZEN = False
@@ -298,16 +278,11 @@ def main():
     logging.setup_logging()
 
     parser = argparse.ArgumentParser()
-<<<<<<< Updated upstream
-    parser.add_argument("--video", default="/home/zhang.13617/Desktop/zhang.13617/NBA/mask/Aaron Gordon/freethrow/000.mp4")
-    parser.add_argument("--checkpoint", default="/home/zhang.13617/Desktop/zhang.13617/NBA/ckpt/mvit_app_model.pth")
-=======
     parser.add_argument("--video", nargs='+', default=["/home/zhang.13617/Desktop/zhang.13617/NBA/mask/Aaron Gordon/freethrow/001.mp4"],
                         help="One or more video paths to process")
     parser.add_argument("--video_list", type=str, default=None,
                         help="Path to text file containing video paths (one per line)")
     parser.add_argument("--checkpoint", default="/home/zhang.13617/Desktop/zhang.13617/NBA/ckpt/baicheng_ckpt/mvitv2_freethrow_mask_k400_16frames_1e-5/best_model.pth")
->>>>>>> Stashed changes
     parser.add_argument("--output", default="./cam_output")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--target_id", type=int, default=-1, help="Target class id for CAM; -1 means use argmax")
@@ -325,25 +300,6 @@ def main():
     logger.info(f"MViT CAM Visualization - Method: {args.method.upper()}")
     logger.info("="*80)
 
-<<<<<<< Updated upstream
-    out_dir = Path(args.output)
-    out_dir.mkdir(exist_ok=True, parents=True)
-
-    # Load model and video
-    model = load_model(args.checkpoint, args.device)
-    input_tensor, frames_224, frames_original = process_video(args.video, T=args.frames, out_size=224)
-    input_tensor = input_tensor.to(args.device)
-
-    # Get original frame size for output video
-    original_height, original_width = frames_original[0].shape[:2]
-    logger.info(f"Original frame size: {original_width}x{original_height}")
-
-    logger.info(f"Input tensor: {tuple(input_tensor.shape)}")  # [1, C, T, H, W]
-    num_frames = input_tensor.shape[2]
-
-    # Setup CAM on last block
-    # (Adjust here if you want a different layer)
-=======
     # Get list of videos to process
     video_paths = []
     if args.video_list:
@@ -363,7 +319,6 @@ def main():
     model = load_model(args.checkpoint, args.device)
 
     # Setup CAM generator once
->>>>>>> Stashed changes
     target_layer = model.backbone.blocks[-1]
 
     if args.method == "originalcam":
@@ -382,100 +337,6 @@ def main():
         cam_generator = SimpleGradCAM(model, target_layer, finer=args.finer)
         logger.info(f"Using GradCAM method{' with FINER mode' if args.finer else ''}")
 
-<<<<<<< Updated upstream
-    logger.info("Generating CAM...")
-
-    # Gradient-free methods (originalcam, scorecam) don't need batch duplication or gradients
-    is_gradient_free = args.method in ["originalcam", "scorecam"]
-
-    if is_gradient_free:
-        input_tensor_batched = input_tensor  # No need to duplicate
-        logger.info("Using single input (gradient-free method)")
-    else:
-        # Duplicate input for better BatchNorm statistics
-        input_tensor_batched = input_tensor.repeat(2, 1, 1, 1, 1)  # [2, C, T, H, W]
-        logger.info(f"Batched input: {tuple(input_tensor_batched.shape)}")
-
-    # ============================================================
-    # EVAL MODE - Accurate predictions
-    # ============================================================
-    model.eval()
-    if is_gradient_free:
-        logger.info("Using EVAL mode (accurate predictions, gradient-free CAM)")
-    else:
-        logger.info("Using EVAL mode (accurate predictions, may have weak gradients)")
-
-    # Enable gradients only for gradient-based methods
-    if not is_gradient_free:
-        torch.set_grad_enabled(True)
-        input_tensor_batched.requires_grad_(True)
-
-    # Generate CAM
-    if args.method == "scorecam":
-        cam_flat = cam_generator.generate_cam(input_tensor_batched, target_id=args.target_id,
-                                              batch_size=args.scorecam_batch_size)
-    else:
-        cam_flat = cam_generator.generate_cam(input_tensor_batched, target_id=args.target_id)
-    if cam_flat is None:
-        logger.error("Failed to generate CAM")
-        return
-    logger.info(f"✓ CAM generated: {cam_flat.shape}")
-
-    # Reshape flat tokens -> [T, H, W]
-    # Expected layout for late-stage tokens is about 8 x 7 x 7; infer if mismatched
-    cam_3d = reshape_cam_3d(cam_flat, expect_T=8, expect_H=7, expect_W=7)  # [T,H,W]
-    T_cam, H_cam, W_cam = cam_3d.shape
-    logger.info(f"CAM reshaped to: T={T_cam}, H={H_cam}, W={W_cam}")
-
-    # Overlay per-time CAM on per-frame image (use original size frames for high-res visualization)
-    frames_dir = out_dir / "frames"
-    frames_dir.mkdir(exist_ok=True)
-
-    # Create directory for CAM activations (raw numpy arrays)
-    cam_dir = out_dir / "cam_activations"
-    cam_dir.mkdir(exist_ok=True)
-
-    num_saved = 0
-    for t in range(num_frames):
-        frame = frames_original[t]  # RGB uint8 [H, W, C]
-
-        # Map frame index to CAM time index
-        cam_idx = int(round((t / max(num_frames - 1, 1)) * (T_cam - 1)))
-        cam_2d = cam_3d[cam_idx]
-
-        # Normalize each frame's CAM to [0, 1] independently
-        cam_2d_norm = cam_2d - cam_2d.min()
-        if cam_2d_norm.max() > 0:
-            cam_2d_norm = cam_2d_norm / cam_2d_norm.max()
-
-        # Resize CAM to original frame size and colorize
-        cam_resized = cv2.resize(cam_2d_norm, (frame.shape[1], frame.shape[0]))
-
-        # Save raw CAM activation (normalized, resized to original frame size)
-        cam_npy_path = cam_dir / f"frame_{t:03d}_cam.npy"
-        np.save(str(cam_npy_path), cam_resized)
-
-        cam_uint8 = np.uint8(np.clip(cam_resized * 255.0, 0, 255))
-        cam_colored = cv2.applyColorMap(cam_uint8, cv2.COLORMAP_JET)
-        cam_colored = cv2.cvtColor(cam_colored, cv2.COLOR_BGR2RGB)
-
-        # Overlay
-        vis = np.uint8(0.5 * cam_colored + 0.5 * frame)
-
-        # Save frame
-        out_path = frames_dir / f"frame_{t:03d}.jpg"
-        cv2.imwrite(str(out_path), cv2.cvtColor(vis, cv2.COLOR_RGB2BGR))
-        num_saved += 1
-
-    logger.info(f"✓ Saved {num_saved} frames with CAM overlays to {frames_dir}")
-    logger.info(f"✓ Saved {num_saved} CAM activations (.npy) to {cam_dir}")
-
-    # Create video from saved frames (use original frame size)
-    write_video_from_frames(frames_dir, out_dir, size=(original_width, original_height), fps_out=10)
-
-    logger.info("="*80)
-    logger.info("✓✓✓ SUCCESS! ✓✓✓")
-=======
     is_gradient_free = args.method in ["originalcam", "scorecam"]
     model.eval()
 
@@ -591,7 +452,6 @@ def main():
 
     logger.info("="*80)
     logger.info(f"✓✓✓ SUCCESS! Processed {len(video_paths)} video(s) ✓✓✓")
->>>>>>> Stashed changes
     logger.info("="*80)
 
 

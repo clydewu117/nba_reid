@@ -1,0 +1,34 @@
+#!/bin/bash
+#SBATCH --account=pas2136
+#SBATCH --job-name=VideoMAEv2_cam
+#SBATCH --time=20:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --gpus-per-node=1
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=32G
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=liu.12122@osu.edu
+#SBATCH --output=slurm_output/VideoMAEv2_cam.out.%j
+
+set -x
+
+CSV_PATH=/fs/scratch/PAS3184/v3/train_test_split.csv
+CONFIG_PATH=/users/PAS2985/cz2128/ReID/nba_reid-cam/configs/config_videomaev2.yaml
+OUTPUT_ROOT=/fs/scratch/PAS3184/v3_cam
+MODEL_NAME=VideoMAEv2
+CHECKPOINTS="\
+  /fs/scratch/PAS3184/Fangxun_processed/VideoMAEv2_color_ckpt/VideoMAEv2_color_appearance_beginning_nosplitsampling.pth \
+  /fs/scratch/PAS3184/Fangxun_processed/VideoMAEv2_color_ckpt/VideoMAEv2_color_appearance_beginning_splitsampling.pth \
+  /fs/scratch/PAS3184/Fangxun_processed/VideoMAEv2_color_ckpt/VideoMAEv2_color_mask_beginning_nosplitsampling.pth \
+  /fs/scratch/PAS3184/Fangxun_processed/VideoMAEv2_color_ckpt/VideoMAEv2_color_mask_beginning_splitsampling.pth \
+  "
+
+cd /users/PAS2985/cz2128/ReID/nba_reid-cam
+python batch_videomaev2_cam.py \
+  --csv "$CSV_PATH" \
+  --config "$CONFIG_PATH" \
+  --output-root "$OUTPUT_ROOT" \
+  --model-name "$MODEL_NAME" \
+  --methods originalcam scorecam \
+  --checkpoints $CHECKPOINTS
