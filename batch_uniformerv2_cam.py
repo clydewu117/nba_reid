@@ -423,7 +423,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="cuda", choices=["cuda", "cpu"])
     parser.add_argument("--methods", nargs="+", default=["originalcam", "scorecam"],
                         choices=["originalcam", "scorecam", "gradcam", "gradcam++", "layercam"])
-    parser.add_argument("--sampling", nargs="+", default=["random", "uniform"],
+    parser.add_argument("--sampling", nargs="+", default=["uniform"],
                         choices=["random", "uniform"],
                         help="Sampling strategy(ies) to use per clip (default: random uniform)")
     parser.add_argument("--frames", type=int, default=16, help="Number of frames sampled per clip")

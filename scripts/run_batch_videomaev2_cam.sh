@@ -28,6 +28,6 @@ python batch_videomaev2_cam.py \
   --config "$CONFIG_PATH" \
   --output-root "$OUTPUT_ROOT" \
   --model-name "$MODEL_NAME" \
-  --sampling random uniform \
+  --sampling uniform \
   --methods originalcam scorecam \
   --checkpoints $CHECKPOINTS
