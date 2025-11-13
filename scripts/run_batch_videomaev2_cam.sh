@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --account=pas2136
+#SBATCH --account=
 #SBATCH --job-name=VideoMAEv2_cam
 #SBATCH --time=20:00:00
 #SBATCH --nodes=1
@@ -8,7 +8,7 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=32G
 #SBATCH --mail-type=ALL
-#SBATCH --mail-user=liu.12122@osu.edu
+#SBATCH --mail-user=
 #SBATCH --output=slurm_output/VideoMAEv2_cam.out.%j
 
 set -x
@@ -18,10 +18,8 @@ CONFIG_PATH=/users/PAS2985/cz2128/ReID/nba_reid-cam/configs/config_videomaev2.ya
 OUTPUT_ROOT=/fs/scratch/PAS3184/v3_cam
 MODEL_NAME=VideoMAEv2
 CHECKPOINTS="\
-  /fs/scratch/PAS3184/Fangxun_processed/VideoMAEv2_color_ckpt/VideoMAEv2_color_appearance_beginning_nosplitsampling.pth \
-  /fs/scratch/PAS3184/Fangxun_processed/VideoMAEv2_color_ckpt/VideoMAEv2_color_appearance_beginning_splitsampling.pth \
-  /fs/scratch/PAS3184/Fangxun_processed/VideoMAEv2_color_ckpt/VideoMAEv2_color_mask_beginning_nosplitsampling.pth \
-  /fs/scratch/PAS3184/Fangxun_processed/VideoMAEv2_color_ckpt/VideoMAEv2_color_mask_beginning_splitsampling.pth \
+  /path/to/videomaev2_checkpoint1.pth \
+  /path/to/videomaev2_checkpoint2.pth \
   "
 
 cd /users/PAS2985/cz2128/ReID/nba_reid-cam
