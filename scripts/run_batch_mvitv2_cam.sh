@@ -26,6 +26,7 @@ python batch_mvitv2_cam.py \
   --csv "$CSV_PATH" \
   --output-root "$OUTPUT_ROOT" \
   --model-name "$MODEL_NAME" \
+  --sampling random uniform \
   --methods originalcam scorecam \
   --checkpoints $CHECKPOINTS
 

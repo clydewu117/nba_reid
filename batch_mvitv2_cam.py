@@ -8,7 +8,7 @@ Highlights:
 - Runs both random-segment and uniform-segment sampling strategies for each clip.
 - Supports multiple CAM methods (OriginalCAM, ScoreCAM, GradCAM, etc.).
 - Optional train mode toggle for stronger gradients with BN-sensible duplication.
-- Saves PNG overlays, raw CAM activations, and optional videos organized as
+- Saves PNG overlays, raw CAM activations, and optional mp4 videos under
   `output_root/model_name/checkpoint/video_type/identity/clip/sampling/method`.
 """
 
@@ -45,6 +45,11 @@ from cam_util import (  # noqa: E402
 from run_gradcam_mvit import load_model, reshape_cam_3d  # noqa: E402
 
 logger = logging.get_logger(__name__)
+
+SAMPLING_MODE_MAP = {
+    "random": "random_segments",
+    "uniform": "uniform_segments",
+}
 
 
 def set_deterministic(seed: int = 42) -> None:
@@ -300,6 +305,11 @@ def process_video_entry(
 
     total_frames = len(frames)
     sampling_sets = sample_frame_indices(total_frames, args.frames)
+    sampling_sets = {name: sampling_sets[name] for name in args.sampling_keys if name in sampling_sets}
+
+    if not sampling_sets:
+        logger.error("No valid sampling modes selected; skipping video.")
+        return 0, 1
 
     video_root = (
         output_checkpoint_root
@@ -409,6 +419,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="cuda", choices=["cuda", "cpu"])
     parser.add_argument("--methods", nargs="+", default=["originalcam", "scorecam"],
                         choices=["originalcam", "scorecam", "gradcam", "gradcam++", "layercam"])
+    parser.add_argument("--sampling", nargs="+", default=["random", "uniform"],
+                        choices=["random", "uniform"],
+                        help="Sampling strategy(ies) to use per clip (default: random uniform)")
     parser.add_argument("--frames", type=int, default=16, help="Number of frames sampled per clip")
     parser.add_argument("--target-id", type=int, default=-1, help="Target class ID for CAM; -1 uses argmax")
     parser.add_argument("--scorecam-batch-size", type=int, default=64,
@@ -446,6 +459,13 @@ def main() -> None:
     logging.setup_logging()
     set_deterministic()
     args = parse_args()
+
+    sampling_keys: List[str] = []
+    for mode in args.sampling:
+        key = SAMPLING_MODE_MAP[mode]
+        if key not in sampling_keys:
+            sampling_keys.append(key)
+    args.sampling_keys = sampling_keys
 
     csv_rows = load_csv_rows(args.csv)
     entries = filter_entries(csv_rows, args.video_type, args.shot_type)
