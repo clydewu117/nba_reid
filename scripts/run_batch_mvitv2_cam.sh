@@ -29,4 +29,4 @@ python batch_mvitv2_cam.py \
   --sampling uniform \
   --modality appearance \
   --methods originalcam scorecam \
-  --checkpoints $CHECKPOINTS
+  --checkpoints "$CHECKPOINTS"

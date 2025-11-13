@@ -31,4 +31,4 @@ python batch_videomaev2_cam.py \
   --sampling uniform \
   --modality appearance \
   --methods originalcam scorecam \
-  --checkpoints $CHECKPOINTS
+  --checkpoints "$CHECKPOINTS"
