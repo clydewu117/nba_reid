@@ -3,6 +3,8 @@ outputs/
 inference_outputs/
 slurm_output/
 test_output/
+test_results/
+test_run/
 
 scripts/
 train_test.sh
@@ -27,6 +29,3 @@ timesformer/config/__pycache__/
 timesformer/datasets/__pycache__/
 timesformer/models/__pycache__/
 timesformer/utils/__pycache__/
-
-test_results/
-test_run/

@@ -33,7 +33,7 @@ MODEL:
   NUM_CLASSES: 0
   USE_CHECKPOINT: true
 NUM_GPUS: 1
-OUTPUT_DIR: ./outputs/VideoMAEv2_v3_mask_middle_nosplitsampling
+OUTPUT_DIR: ./outputs/v3/VideoMAEv2_mask_middle_nosplitsampling
 REID:
   EMBED_DIM: 512
   NECK_FEAT: after
