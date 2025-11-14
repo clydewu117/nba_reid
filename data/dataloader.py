@@ -20,7 +20,7 @@ class BasketballVideoDataset(Dataset):
     
     def __init__(self, root, video_type='appearance', shot_type='both',
                  num_frames=16, frame_stride=4, is_train=True, 
-                 train_ratio=0.75, transform=None, seed=42, 
+                 train_ratio=0.7, transform=None, seed=42, 
                  sample_start='beginning', split_sampling=False, 
                  use_presplit=False):  # 新增参数：使用预先分好的train/test文件夹
         self.root = root

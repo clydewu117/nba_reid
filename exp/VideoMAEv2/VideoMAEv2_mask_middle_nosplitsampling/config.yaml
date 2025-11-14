@@ -7,11 +7,11 @@ DATA:
   ROOT: /fs/scratch/PAS3184/v3
   SHOT_TYPE: freethrow
   TRAIN_RATIO: 0.7
-  VIDEO_TYPE: appearance
+  VIDEO_TYPE: mask
   WIDTH: 224
   USE_SAMPLER: true
   NUM_INSTANCES: 4
-  SAMPLE_START: beginning
+  SAMPLE_START: middle
   SPLIT_SAMPLING: false
   USE_PRESPLIT: false
 GPU_IDS:
@@ -33,7 +33,7 @@ MODEL:
   NUM_CLASSES: 0
   USE_CHECKPOINT: true
 NUM_GPUS: 1
-OUTPUT_DIR: ./outputs/VideoMAEv2_v3_appearance_beginning_nosplitsampling
+OUTPUT_DIR: ./outputs/VideoMAEv2_v3_mask_middle_nosplitsampling
 REID:
   EMBED_DIM: 512
   NECK_FEAT: after
@@ -65,7 +65,7 @@ VIDEOMAEV2:
   PRETRAIN: /users/PAS2985/cz2128/ReID/VideoMAEv2/model_zoo/vit_b_k710_dl_from_giant.pth
   MODEL_KEY: model|module|state_dict
   TUBELET_SIZE: 2
-  DROP_RATE: 0.0
+  DROP_RATE: 0.2
   ATTN_DROP_RATE: 0.0
   DROP_PATH_RATE: 0.0
   HEAD_DROP_RATE: 0.0

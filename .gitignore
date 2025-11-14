@@ -2,8 +2,11 @@ checkpoints/
 outputs/
 inference_outputs/
 slurm_output/
+test_output/
 
+scripts/
 train_test.sh
+test_performance.sh
 
 __pycache__/
 config/__pycache__/
@@ -17,6 +20,7 @@ slowfast/config/__pycache__/
 slowfast/datasets/__pycache__/
 slowfast/models/__pycache__/
 slowfast/utils/__pycache__/
+slowfast/visualization/__pycache__/
 
 timesformer/__pycache__/
 timesformer/config/__pycache__/
