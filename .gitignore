@@ -29,3 +29,4 @@ timesformer/models/__pycache__/
 timesformer/utils/__pycache__/
 
 test_results/
+test_run/
