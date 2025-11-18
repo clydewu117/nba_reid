@@ -132,3 +132,5 @@ dmypy.json
 outputs/
 
 checkpoints/
+
+test_results/

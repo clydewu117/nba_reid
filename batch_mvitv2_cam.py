@@ -443,7 +443,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model-name", type=str, default="MViTv2",
                         help="Model name folder inserted above checkpoint level")
     parser.add_argument("--device", default="cuda", choices=["cuda", "cpu"])
-    parser.add_argument("--methods", nargs="+", default=["originalcam", "scorecam"],
+    parser.add_argument("--methods", nargs="+", default=["originalcam"],
                         choices=["originalcam", "scorecam", "gradcam", "gradcam++", "layercam"])
     parser.add_argument("--sampling", nargs="+", default=["uniform"],
                         choices=["random", "uniform"],
