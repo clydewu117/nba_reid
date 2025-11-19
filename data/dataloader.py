@@ -22,7 +22,8 @@ class BasketballVideoDataset(Dataset):
                  num_frames=16, frame_stride=4, is_train=True, 
                  train_ratio=0.7, transform=None, seed=42, 
                  sample_start='beginning', split_sampling=False, 
-                 use_presplit=False):  # 新增参数：使用预先分好的train/test文件夹
+                 use_presplit=False, identity_split=False, 
+                 train_identities=80):  # 新增参数：identity-level split
         self.root = root
         self.video_type = video_type
         self.shot_type = shot_type
@@ -34,6 +35,9 @@ class BasketballVideoDataset(Dataset):
         self.sample_start = sample_start  # 'beginning' or 'middle'
         self.split_sampling = split_sampling  # 是否使用前后分段采样 (前50%采4帧，后50%采12帧)
         self.use_presplit = use_presplit  # 是否使用预先分好的train/test文件夹
+        self.identity_split = identity_split  # 是否使用identity-level划分
+        self.train_identities = train_identities  # 训练集identity数量
+        self.seed = seed
         
         # 设置随机种子
         random.seed(seed)
@@ -111,9 +115,32 @@ class BasketballVideoDataset(Dataset):
         identity_folders = sorted([d for d in os.listdir(base_path) 
                                   if os.path.isdir(os.path.join(base_path, d))])
         
-        # 创建identity到pid的映射
-        pid_list = [identity.replace('_', ' ') for identity in identity_folders]
-        pid_to_label = {folder: label for label, folder in enumerate(identity_folders)}
+        # Identity-level split: 将identities划分为训练集和测试集
+        if self.identity_split:
+            # 使用seed保证可复现
+            identity_folders_copy = identity_folders.copy()
+            random.shuffle(identity_folders_copy)
+            
+            # 前 train_identities 个作为训练集，其余作为测试集
+            train_identity_folders = identity_folders_copy[:self.train_identities]
+            test_identity_folders = identity_folders_copy[self.train_identities:]
+            
+            # 根据当前模式选择对应的identity
+            if self.is_train:
+                selected_identities = train_identity_folders
+            else:
+                selected_identities = test_identity_folders
+            
+            # 只保留选中的identities
+            identity_folders = selected_identities
+            
+            # 重新创建pid映射（保证训练集和测试集的pid连续）
+            pid_list = [identity.replace('_', ' ') for identity in sorted(identity_folders)]
+            pid_to_label = {folder: label for label, folder in enumerate(sorted(identity_folders))}
+        else:
+            # 原来的逻辑：所有identities共享
+            pid_list = [identity.replace('_', ' ') for identity in identity_folders]
+            pid_to_label = {folder: label for label, folder in enumerate(identity_folders)}
         
         # 按identity收集所有视频路径
         identity_videos = defaultdict(list)
@@ -152,8 +179,12 @@ class BasketballVideoDataset(Dataset):
             if len(videos) == 0:
                 continue
             
-            # 分别对freethrow和3pt进行划分
-            if self.shot_type == 'both':
+            # Identity-level split: 直接使用该identity的所有视频
+            if self.identity_split:
+                # 不进行video-level划分，该identity的所有视频都用于当前集合
+                data.extend(videos)
+            # Video-level split: 分别对freethrow和3pt进行划分
+            elif self.shot_type == 'both':
                 freethrow_videos = [v for v in videos if v['shot_type'] == 'freethrow']
                 threept_videos = [v for v in videos if v['shot_type'] == '3pt']
                 
@@ -172,8 +203,11 @@ class BasketballVideoDataset(Dataset):
         
         # 打印基本信息
         split = 'Train' if self.is_train else 'Test'
+        split_mode = 'Identity-level' if self.identity_split else 'Video-level'
         print(f"\n{'='*60}")
-        print(f"{split} Dataset: {self.video_type} + {self.shot_type}")
+        print(f"{split} Dataset ({split_mode}): {self.video_type} + {self.shot_type}")
+        if self.identity_split:
+            print(f"Split Mode: {self.train_identities} train IDs / {120 - self.train_identities} test IDs")
         print(f"Sample Start: {self.sample_start}")
         print(f"Split Sampling: {self.split_sampling}")  # 新增：显示分段采样状态
         if self.split_sampling:
@@ -181,6 +215,8 @@ class BasketballVideoDataset(Dataset):
         print(f"{'='*60}")
         print(f"Identities: {len(pid_list)}")
         print(f"Videos: {len(data)}")
+        if len(data) > 0:
+            print(f"Avg videos per identity: {len(data) / len(pid_list):.1f}")
         print(f"{'='*60}\n")
         
         return data, pid_list
@@ -500,6 +536,12 @@ def build_dataloader(cfg, is_train=True):
     # 从config中获取use_presplit参数，默认为False
     use_presplit = getattr(cfg.DATA, 'USE_PRESPLIT', False)
     
+    # 从config中获取identity_split参数，默认为False
+    identity_split = getattr(cfg.DATA, 'IDENTITY_SPLIT', False)
+    
+    # 从config中获取train_identities参数，默认为80
+    train_identities = getattr(cfg.DATA, 'TRAIN_IDENTITIES', 80)
+    
     dataset = BasketballVideoDataset(
         root=cfg.DATA.ROOT,
         video_type=cfg.DATA.VIDEO_TYPE,
@@ -511,8 +553,10 @@ def build_dataloader(cfg, is_train=True):
         transform=transform,
         seed=cfg.SEED,
         sample_start=sample_start,
-        split_sampling=split_sampling,  # 新增参数
-        use_presplit=use_presplit  # 新增参数
+        split_sampling=split_sampling,
+        use_presplit=use_presplit,
+        identity_split=identity_split,  # 新增参数
+        train_identities=train_identities  # 新增参数
     )
     
     # 训练时使用RandomIdentitySampler

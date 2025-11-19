@@ -30,6 +30,10 @@ _C.DATA.NUM_INSTANCES = 4           # 每个identity在batch中的样本数（P*
                                     # batch_size必须能被num_instances整除
                                     # 例如: batch_size=64, num_instances=4 → 每个batch有16个不同的identity
 
+_C.DATA.IDENTITY_SPLIT = False      # 是否启用identity-level划分
+_C.DATA.TRAIN_IDENTITIES = 80       # 训练集identity数量
+
+
 # -----------------------------------------------------------------------------
 # Model
 # -----------------------------------------------------------------------------
