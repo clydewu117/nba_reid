@@ -29,6 +29,7 @@ import torch.nn.functional as F
 
 from .build import MODEL_REGISTRY
 
+from .mvitv2_model import ReIDHead
 
 # Use vendored SlowFast
 from slowfast.config.defaults import get_cfg as sf_get_cfg
@@ -170,19 +171,17 @@ class MViTReID(nn.Module):
 			cfg.REID.EMBED_DIM if hasattr(cfg, "REID") and hasattr(cfg.REID, "EMBED_DIM") else 512
 		)
 
-		# Local import to avoid top-level resolution issues in some analyzers
-		try:
-			from .mvitv2_model import ReIDHead as _ReIDHead  # type: ignore
-		except Exception:  # pragma: no cover - fallback for non-package execution
-			from unireid.models.mvitv2_model import ReIDHead as _ReIDHead  # type: ignore
-
-		self.reid_head = _ReIDHead(
+		# Check if in classification mode
+		is_classification = getattr(cfg.DATA, 'SHOT_CLASSIFICATION', False)
+		
+		self.reid_head = ReIDHead(
 			in_dim=self.feat_dim,
 			num_classes=num_classes,
-			embed_dim=self.embed_dim,
 			neck_feat=self.neck_feat,
+			is_classification=is_classification,
 		)
 
+	@torch.no_grad()
 	def _forward_features_eval(self, x):
 		"""Feature extraction path (eval) mirroring SlowFast MViT forward up to pre-head."""
 		m = self.backbone
@@ -238,7 +237,56 @@ class MViTReID(nn.Module):
 
 	def _forward_features_train(self, x):
 		"""Training path: identical to eval but with autograd enabled."""
-		return self._forward_features_eval(x)
+		m = self.backbone
+		x, bcthw = m.patch_embed(x)
+		bcthw = list(bcthw)
+		if len(bcthw) == 4:
+			bcthw.insert(2, torch.tensor(m.T))
+		T, H, W = bcthw[-3], bcthw[-2], bcthw[-1]
+		B, N, C = x.shape
+
+		s = 1 if m.cls_embed_on else 0
+		if getattr(m, "use_fixed_sincos_pos", False):
+			x = x + m.pos_embed[:, s:, :]
+		if m.cls_embed_on:
+			cls_tokens = m.cls_token.expand(B, -1, -1)
+			if getattr(m, "use_fixed_sincos_pos", False):
+				cls_tokens = cls_tokens + m.pos_embed[:, :s, :]
+			x = torch.cat((cls_tokens, x), dim=1)
+
+		if m.use_abs_pos:
+			if m.sep_pos_embed:
+				pos_embed = m.pos_embed_spatial.repeat(1, m.patch_dims[0], 1) + torch.repeat_interleave(
+					m.pos_embed_temporal, m.patch_dims[1] * m.patch_dims[2], dim=1
+				)
+				if m.cls_embed_on:
+					pos_embed = torch.cat([m.pos_embed_class, pos_embed], 1)
+				x = x + m._get_pos_embed(pos_embed, bcthw)
+			else:
+				x = x + m._get_pos_embed(m.pos_embed, bcthw)
+
+		if m.drop_rate:
+			x = m.pos_drop(x)
+		if m.norm_stem is not None:
+			x = m.norm_stem(x)
+
+		thw = [T, H, W]
+		for blk in m.blocks:
+			x, thw = blk(x, thw)
+
+		if m.use_mean_pooling:
+			if m.cls_embed_on:
+				x = x[:, 1:]
+			x = x.mean(1)
+			x = m.norm(x)
+		elif m.cls_embed_on:
+			x = m.norm(x)
+			x = x[:, 0]
+		else:
+			x = m.norm(x)
+			x = x.mean(1)
+
+		return x
 
 	def forward(self, x, label=None):
 		"""
@@ -256,9 +304,8 @@ class MViTReID(nn.Module):
 		# Extract features from backbone
 		if self.training:
 			feats = self._forward_features_train(x)
-			cls_score, global_feat, feat = self.reid_head(feats, label)
-			return {"cls_score": cls_score, "global_feat": global_feat, "feat": feat}
+			cls_score, bn_feat, feat = self.reid_head(feats, label)
+			return {"cls_score": cls_score, "bn_feat": bn_feat, "feat": feat}
 		else:
 			feats = self._forward_features_eval(x)
-			# reid_head returns dict in eval mode: {"cls_score": ..., "feat": ...}
 			return self.reid_head(feats)

@@ -9,7 +9,7 @@ Features:
 - Supports multiple CAM methods (OriginalCAM, ScoreCAM, GradCAM, etc.).
 - Optional BN folding and train-mode toggles for stronger gradients.
 - Saves PNG overlays, raw CAM activations, and optional mp4 videos under
-  `output_root/model_name/checkpoint/video_type/identity/clip/sampling/method`.
+  `output_root/model_name/checkpoint/shot_type/identity/clip/sampling/method`.
 """
 
 from __future__ import annotations
@@ -313,8 +313,10 @@ def process_video_entry(
         logger.error("No valid sampling modes selected; skipping video.")
         return 0, 1
 
+    shot_type = entry.get("shot_type", "unknown") or "unknown"
     video_root = (
         output_checkpoint_root
+        / shot_type
         / entry.get("identity_folder", entry.get("identity_display", "unknown"))
         / Path(entry.get("filename", video_path.stem)).stem
     )
@@ -423,7 +425,7 @@ def parse_args() -> argparse.Namespace:
                         choices=["originalcam", "scorecam", "gradcam", "gradcam++", "layercam"])
     parser.add_argument("--sampling", nargs="+", default=["uniform"],
                         choices=["random", "uniform"],
-                        help="Sampling strategy(ies) to use per clip (default: random uniform)")
+                        help="Sampling strategy(ies) to use per clip")
     parser.add_argument("--modality", choices=["appearance", "mask"], default="appearance",
                         help="Select appearance or mask")
     parser.add_argument("--frames", type=int, default=16, help="Number of frames sampled per clip")

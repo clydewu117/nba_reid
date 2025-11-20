@@ -79,6 +79,9 @@ class OriginalCAM:
             # Handle tuple output (cls_score, bn_feat, feat)
             logits = output[0]
             logger.info(f"[OriginalCAM] Model output (tuple[0]) shape: {logits.shape}")
+        elif torch.is_tensor(output):
+            logits = output
+            logger.info(f"[OriginalCAM] Model output tensor shape: {logits.shape}")
         else:
             logger.error(f"[OriginalCAM] Model output is not a dict or tuple! Type: {type(output)}")
             return None
@@ -89,30 +92,56 @@ class OriginalCAM:
 
         logger.info(f"[OriginalCAM] Spatial features shape: {self.spatial_features.shape}")
 
-        # Show top-5 predictions
-        probs = F.softmax(logits[0], dim=0)
-        top5_probs, top5_ids = torch.topk(probs, min(5, logits.shape[1]))
-
-        logger.info("="*70)
-        logger.info("[OriginalCAM] Top-5 Predicted Classes:")
-        for i, (pred_id, prob) in enumerate(zip(top5_ids, top5_probs)):
-            logit_val = float(logits[0, pred_id])
-            logger.info(f"  Rank {i+1}: Class {int(pred_id):3d} | Probability: {float(prob)*100:6.2f}% | Logit: {logit_val:+.3f}")
-        logger.info("="*70)
-
-        # Determine target class
-        if target_id is None or target_id < 0 or target_id >= logits.shape[1]:
-            chosen = int(torch.argmax(logits[0]).item())
-        else:
-            chosen = int(target_id)
-        logger.info(f"[OriginalCAM] Using class {chosen} for CAM")
-
-        # Get classifier weights
         if not hasattr(self.model, 'reid_head') or not hasattr(self.model.reid_head, 'classifier'):
             logger.error("[OriginalCAM] Cannot find reid_head.classifier!")
             return None
 
         classifier = self.model.reid_head.classifier
+        num_classes = classifier.weight.shape[0]
+
+        # Align logits with classifier dimension when model returns embeddings
+        if logits.shape[1] != num_classes:
+            if logits.shape[1] == classifier.weight.shape[1]:
+                logger.info(
+                    "[OriginalCAM] Converting embedding output to logits via classifier weights"
+                )
+                logits = torch.matmul(logits, classifier.weight.t())
+                if classifier.bias is not None:
+                    logits = logits + classifier.bias.unsqueeze(0)
+            else:
+                logger.warning(
+                    "[OriginalCAM] Output dim %d incompatible with classifier (%d); defaulting to class 0",
+                    logits.shape[1],
+                    num_classes,
+                )
+                logits = torch.zeros(logits.shape[0], num_classes, device=logits.device)
+
+        # Show top-5 predictions (or all if <5 classes)
+        probs = F.softmax(logits[0], dim=0)
+        topk = min(5, logits.shape[1])
+        top5_probs, top5_ids = torch.topk(probs, topk)
+
+        logger.info("=" * 70)
+        logger.info("[OriginalCAM] Top-%d Predicted Classes:", topk)
+        for i, (pred_id, prob) in enumerate(zip(top5_ids, top5_probs)):
+            logit_val = float(logits[0, pred_id])
+            logger.info(
+                "  Rank %d: Class %3d | Probability: %6.2f%% | Logit: %+0.3f",
+                i + 1,
+                int(pred_id),
+                float(prob) * 100,
+                logit_val,
+            )
+        logger.info("=" * 70)
+
+        # Determine target class
+        if target_id is not None and 0 <= target_id < num_classes:
+            chosen = int(target_id)
+        else:
+            chosen = int(torch.argmax(logits[0]).item())
+        logger.info(f"[OriginalCAM] Using class {chosen} for CAM")
+
+        # Get classifier weights
         W = classifier.weight  # [num_classes, embed_dim]
 
         # Get weights for target class
