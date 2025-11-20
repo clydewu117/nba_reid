@@ -564,6 +564,38 @@ def train(cfg):
             #     }
             #     torch.save(checkpoint, os.path.join(cfg.OUTPUT_DIR, f'checkpoint_epoch_{epoch}.pth'))
 
+    # 保存最后一个epoch的模型
+    print(f"\n💾 Saving last epoch model (epoch {cfg.SOLVER.MAX_EPOCHS})...")
+    last_checkpoint = {
+        'epoch': cfg.SOLVER.MAX_EPOCHS,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'scheduler_state_dict': scheduler.state_dict(),
+        'config': cfg
+    }
+    
+    if is_classification:
+        # 获取最后一个epoch的指标（如果有评估的话）
+        if epoch == cfg.SOLVER.MAX_EPOCHS and epoch % cfg.SOLVER.EVAL_PERIOD == 0:
+            last_checkpoint.update({
+                'accuracy': acc,
+                'f1': f1,
+                'precision': precision,
+                'recall': recall
+            })
+    else:
+        # ReID模式
+        if epoch == cfg.SOLVER.MAX_EPOCHS and epoch % cfg.SOLVER.EVAL_PERIOD == 0:
+            last_checkpoint.update({
+                'rank1': rank1,
+                'mAP': mAP,
+                'rank5': rank5,
+                'rank10': rank10
+            })
+    
+    torch.save(last_checkpoint, os.path.join(cfg.OUTPUT_DIR, 'last_model.pth'))
+    print(f"✅ Saved last model to {os.path.join(cfg.OUTPUT_DIR, 'last_model.pth')}")
+
     print("\n" + "=" * 80)
     print("Training Completed! Best Results:")
     if is_classification:

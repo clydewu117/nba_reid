@@ -32,7 +32,7 @@ MODEL:
   NUM_CLASSES: 0
   USE_CHECKPOINT: true
 NUM_GPUS: 1
-OUTPUT_DIR: ./outputs/appearance_k400_16frames_beginning_nosplitsampling_drop03
+OUTPUT_DIR: ./outputs/appearance_80_40_drop03
 REID:
   EMBED_DIM: 512
   NECK_FEAT: after
