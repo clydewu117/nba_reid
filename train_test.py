@@ -140,25 +140,20 @@ def test(cfg, model, query_loader, gallery_loader, device, epoch=None):
         evaluator = ClassificationEvaluator(num_classes=2)
         evaluator.reset()
         
-        print(f"\nEvaluating classification on test set ({len(query_loader.dataset) + len(gallery_loader.dataset)} samples)...")
+        print(f"\nEvaluating classification on test set ({len(query_loader.dataset)} samples)...")
         
-        # Process query set
+        # Process full test set (query_loader contains all test data in classification mode)
         for batch in query_loader:
             videos = batch['video'].to(device)
             labels = batch['pid'].to(device)  # In classification mode, pid is actually shot_type label
             
             with autocast():
-                logits, _ = model(videos, label=None, training=False)  # Get logits only
-            
-            evaluator.update(logits, labels)
-        
-        # Process gallery set
-        for batch in gallery_loader:
-            videos = batch['video'].to(device)
-            labels = batch['pid'].to(device)
-            
-            with autocast():
-                logits, _ = model(videos, label=None, training=False)
+                outputs = model(videos, label=labels)
+                # Handle both dict output (training) and tensor output (eval)
+                if isinstance(outputs, dict):
+                    logits = outputs['cls_score']
+                else:
+                    logits = outputs  # Assume direct tensor output
             
             evaluator.update(logits, labels)
         
@@ -342,30 +337,39 @@ def train(cfg):
     print(f"  Train videos: {len(train_loader.dataset)}")
     print(f"  Test videos: {len(test_loader.dataset)}")
 
-    # Split test set into query and gallery
-    dataset = test_loader.dataset
-    q_idx, g_idx = split_query_gallery(dataset, 0.5, cfg.SEED)
+    # Check if in classification mode
+    is_classification = getattr(cfg.DATA, 'SHOT_CLASSIFICATION', False)
     
     # 导入collate_fn
     from data.dataloader import collate_fn
     
-    q_loader = torch.utils.data.DataLoader(
-        torch.utils.data.Subset(dataset, q_idx),
-        batch_size=cfg.TEST.BATCH_SIZE, 
-        shuffle=False,
-        num_workers=cfg.DATA.NUM_WORKERS,
-        collate_fn=collate_fn,
-        pin_memory=True
-    )
-    
-    g_loader = torch.utils.data.DataLoader(
-        torch.utils.data.Subset(dataset, g_idx),
-        batch_size=cfg.TEST.BATCH_SIZE, 
-        shuffle=False,
-        num_workers=cfg.DATA.NUM_WORKERS,
-        collate_fn=collate_fn,
-        pin_memory=True
-    )
+    if is_classification:
+        # Classification mode: use full test set (no query/gallery split)
+        print(f"\nClassification mode: Using full test set for evaluation")
+        q_loader = test_loader
+        g_loader = None  # Not needed for classification
+    else:
+        # ReID mode: Split test set into query and gallery
+        dataset = test_loader.dataset
+        q_idx, g_idx = split_query_gallery(dataset, 0.5, cfg.SEED)
+        
+        q_loader = torch.utils.data.DataLoader(
+            torch.utils.data.Subset(dataset, q_idx),
+            batch_size=cfg.TEST.BATCH_SIZE, 
+            shuffle=False,
+            num_workers=cfg.DATA.NUM_WORKERS,
+            collate_fn=collate_fn,
+            pin_memory=True
+        )
+        
+        g_loader = torch.utils.data.DataLoader(
+            torch.utils.data.Subset(dataset, g_idx),
+            batch_size=cfg.TEST.BATCH_SIZE, 
+            shuffle=False,
+            num_workers=cfg.DATA.NUM_WORKERS,
+            collate_fn=collate_fn,
+            pin_memory=True
+        )
 
     # 初始化wandb
     run_name = f"{cfg.OUTPUT_DIR.split('/')[-1]}"
@@ -543,6 +547,7 @@ def main():
     parser = argparse.ArgumentParser(description='Basketball Video ReID Training')
     parser.add_argument('--config-file', type=str, default='', help='path to config file')
     parser.add_argument('--mode', type=str, default='train', choices=['train', 'test'])
+    parser.add_argument('--checkpoint', type=str, default='', help='path to checkpoint for test mode')
     parser.add_argument('--wandb-offline', action='store_true', help='run wandb in offline mode')
     parser.add_argument('opts', default=None, nargs=argparse.REMAINDER, 
                        help='modify config options using the command-line')
@@ -561,8 +566,52 @@ def main():
     if args.mode == 'train':
         train(cfg)
     else:
-        print("Test mode not implemented in this version.")
-
+        # Test mode: directly call test function
+        os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        
+        print("=" * 80)
+        print("Test Mode")
+        print(f"  Checkpoint: {args.checkpoint if args.checkpoint else 'None (random init)'}")
+        print("=" * 80)
+        
+        # Build dataloader
+        train_loader, num_classes = build_dataloader(cfg, is_train=True)
+        test_loader, _ = build_dataloader(cfg, is_train=False)
+        
+        cfg.defrost()
+        cfg.MODEL.NUM_CLASSES = num_classes
+        cfg.freeze()
+        
+        is_classification = getattr(cfg.DATA, 'SHOT_CLASSIFICATION', False)
+        from data.dataloader import collate_fn
+        
+        if is_classification:
+            q_loader = test_loader
+            g_loader = None
+        else:
+            dataset = test_loader.dataset
+            q_idx, g_idx = split_query_gallery(dataset, 0.5, cfg.SEED)
+            q_loader = torch.utils.data.DataLoader(
+                torch.utils.data.Subset(dataset, q_idx),
+                batch_size=cfg.TEST.BATCH_SIZE, shuffle=False,
+                num_workers=cfg.DATA.NUM_WORKERS, collate_fn=collate_fn, pin_memory=True
+            )
+            g_loader = torch.utils.data.DataLoader(
+                torch.utils.data.Subset(dataset, g_idx),
+                batch_size=cfg.TEST.BATCH_SIZE, shuffle=False,
+                num_workers=cfg.DATA.NUM_WORKERS, collate_fn=collate_fn, pin_memory=True
+            )
+        
+        model = build_model(cfg).to(device)
+        
+        if args.checkpoint and os.path.exists(args.checkpoint):
+            checkpoint = torch.load(args.checkpoint, map_location=device)
+            model.load_state_dict(checkpoint['model_state_dict'])
+            print(f"Loaded checkpoint from epoch {checkpoint.get('epoch', 'N/A')}")
+        
+        # Call test function directly
+        test(cfg, model, q_loader, g_loader, device, epoch=None)
 
 if __name__ == '__main__':
     main()

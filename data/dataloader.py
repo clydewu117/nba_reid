@@ -646,8 +646,8 @@ def build_dataloader(cfg, is_train=True):
         control_20=control_20
     )
     
-    # 训练时使用RandomIdentitySampler
-    if is_train and hasattr(cfg.DATA, 'USE_SAMPLER') and cfg.DATA.USE_SAMPLER:
+    # 训练时使用RandomIdentitySampler (但分类模式不使用)
+    if is_train and hasattr(cfg.DATA, 'USE_SAMPLER') and cfg.DATA.USE_SAMPLER and not shot_classification:
         from .sampler import RandomIdentitySampler
         
         sampler = RandomIdentitySampler(
@@ -664,7 +664,7 @@ def build_dataloader(cfg, is_train=True):
             collate_fn=collate_fn
         )
     else:
-        # 测试时或不使用sampler时，使用正常的随机采样
+        # 测试时或不使用sampler时或分类模式时，使用正常的随机采样
         dataloader = DataLoader(
             dataset,
             batch_size=cfg.DATA.BATCH_SIZE if is_train else cfg.TEST.BATCH_SIZE,
