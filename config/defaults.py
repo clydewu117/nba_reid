@@ -32,7 +32,8 @@ _C.DATA.NUM_INSTANCES = 4           # 每个identity在batch中的样本数（P*
 
 _C.DATA.IDENTITY_SPLIT = False      # 是否启用identity-level划分
 _C.DATA.TRAIN_IDENTITIES = 80       # 训练集identity数量
-
+_C.DATA.SHOT_CLASSIFICATION = False # 是否进行shot_type分类而不是identity ReID (freethrow vs 3pt, 自动只计数有两种数据的identity)
+_C.DATA.CONTROL_20 = False          # 是否控制每个identity每个shot_type最多20个视频样本（用于消除数据量差异影响）
 
 # -----------------------------------------------------------------------------
 # Model

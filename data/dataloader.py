@@ -23,7 +23,8 @@ class BasketballVideoDataset(Dataset):
                  train_ratio=0.7, transform=None, seed=42, 
                  sample_start='beginning', split_sampling=False, 
                  use_presplit=False, identity_split=False, 
-                 train_identities=80):  # 新增参数：identity-level split
+                 train_identities=80, 
+                 shot_classification=False, control_20=False):
         self.root = root
         self.video_type = video_type
         self.shot_type = shot_type
@@ -32,11 +33,13 @@ class BasketballVideoDataset(Dataset):
         self.is_train = is_train
         self.train_ratio = train_ratio
         self.transform = transform
-        self.sample_start = sample_start  # 'beginning' or 'middle'
-        self.split_sampling = split_sampling  # 是否使用前后分段采样 (前50%采4帧，后50%采12帧)
-        self.use_presplit = use_presplit  # 是否使用预先分好的train/test文件夹
-        self.identity_split = identity_split  # 是否使用identity-level划分
-        self.train_identities = train_identities  # 训练集identity数量
+        self.sample_start = sample_start
+        self.split_sampling = split_sampling
+        self.use_presplit = use_presplit
+        self.identity_split = identity_split
+        self.train_identities = train_identities
+        self.shot_classification = shot_classification
+        self.control_20 = control_20
         self.seed = seed
         
         # 设置随机种子
@@ -45,7 +48,15 @@ class BasketballVideoDataset(Dataset):
         
         # 加载数据
         self.data, self.pid_list = self._load_data()
-        self.num_classes = len(self.pid_list)
+        
+        # 根据任务类型确定类别数
+        if self.shot_classification:
+            # Shot分类任务：2类 (freethrow=0, 3pt=1)
+            self.num_classes = 2
+            self.shot_to_label = {'freethrow': 0, '3pt': 1}
+        else:
+            # Identity ReID任务
+            self.num_classes = len(self.pid_list)
     
     def _load_data(self):
         """加载数据并划分训练/测试集"""
@@ -57,21 +68,20 @@ class BasketballVideoDataset(Dataset):
             identity_folders = sorted([d for d in os.listdir(base_path) 
                                       if os.path.isdir(os.path.join(base_path, d))])
             
-            # 创建identity到pid的映射
-            pid_list = [identity.replace('_', ' ') for identity in identity_folders]
-            pid_to_label = {folder: label for label, folder in enumerate(identity_folders)}
-            
             # 收集数据
             data = []
             split_folder = 'train' if self.is_train else 'test'
+            identities_with_data = set()  # 记录有数据的identity
             
             for identity_folder in identity_folders:
                 identity_path = os.path.join(base_path, identity_folder)
                 identity_display = identity_folder.replace('_', ' ')
-                pid = pid_to_label[identity_folder]
                 
                 # 根据shot_type加载对应的视频
                 shot_types_to_load = ['freethrow', '3pt'] if self.shot_type == 'both' else [self.shot_type]
+                
+                identity_has_data = False  # 标记当前identity是否有数据
+                temp_videos = []  # 暂存当前identity的视频
                 
                 for shot_type in shot_types_to_load:
                     # 路径: root/video_type/identity/shot_type/train(或test)
@@ -84,19 +94,51 @@ class BasketballVideoDataset(Dataset):
                     video_files = sorted([v for v in os.listdir(split_path) 
                                          if v.endswith(('.mp4', '.MP4', '.avi', '.mov', '.MOV'))])
                     
+                    # 如果启用control_20，限制每个shot_type最多20个样本
+                    if self.control_20 and len(video_files) >= 20:
+                        random.shuffle(video_files)
+                        video_files = video_files[:20]
+                    
+                    if len(video_files) > 0:
+                        identity_has_data = True
+                        identities_with_data.add(identity_folder)
+                    
                     for video_file in video_files:
                         video_path = os.path.join(split_path, video_file)
-                        data.append({
+                        temp_videos.append({
                             'video_path': video_path,
-                            'pid': pid,
                             'identity': identity_display,
+                            'identity_folder': identity_folder,  # 用于后续创建pid映射
                             'shot_type': shot_type
                         })
+                
+                # shot_classification模式下自动启用数据同步：只添加有数据的identity
+                # 其他模式：添加所有视频（保持原行为）
+                if not self.shot_classification or identity_has_data:
+                    data.extend(temp_videos)
+            
+            # shot_classification模式下自动只包含有数据的identity
+            if self.shot_classification:
+                identity_folders = sorted(list(identities_with_data))
+            
+            # 创建identity到pid的映射
+            pid_list = [identity.replace('_', ' ') for identity in identity_folders]
+            pid_to_label = {folder: label for label, folder in enumerate(identity_folders)}
+            
+            # 更新data中的pid
+            for item in data:
+                item['pid'] = pid_to_label[item['identity_folder']]
+                del item['identity_folder']  # 删除临时字段
             
             # 打印基本信息
             split = 'Train' if self.is_train else 'Test'
             print(f"\n{'='*60}")
             print(f"{split} Dataset (Pre-split): {self.video_type} + {self.shot_type}")
+            if self.shot_classification:
+                print(f"SHOT_CLASSIFICATION: True (auto-sync identities with both shot types)")
+            print(f"CONTROL_20: {self.control_20}")
+            if self.control_20:
+                print(f"  → Max 20 videos per identity per shot_type")
             print(f"Sample Start: {self.sample_start}")
             print(f"Split Sampling: {self.split_sampling}")
             if self.split_sampling:
@@ -133,26 +175,19 @@ class BasketballVideoDataset(Dataset):
             
             # 只保留选中的identities
             identity_folders = selected_identities
-            
-            # 重新创建pid映射（保证训练集和测试集的pid连续）
-            pid_list = [identity.replace('_', ' ') for identity in sorted(identity_folders)]
-            pid_to_label = {folder: label for label, folder in enumerate(sorted(identity_folders))}
-        else:
-            # 原来的逻辑：所有identities共享
-            pid_list = [identity.replace('_', ' ') for identity in identity_folders]
-            pid_to_label = {folder: label for label, folder in enumerate(identity_folders)}
         
         # 按identity收集所有视频路径
         identity_videos = defaultdict(list)
+        identities_with_data = set()  # 记录有数据的identity
         
         for identity_folder in identity_folders:
             identity_path = os.path.join(base_path, identity_folder)
             identity_display = identity_folder.replace('_', ' ')
-            pid = pid_to_label[identity_folder]
             
             # 根据shot_type加载对应的视频
             shot_types_to_load = ['freethrow', '3pt'] if self.shot_type == 'both' else [self.shot_type]
             
+            identity_has_data = False
             for shot_type in shot_types_to_load:
                 shot_path = os.path.join(identity_path, shot_type)
                 
@@ -163,14 +198,33 @@ class BasketballVideoDataset(Dataset):
                 video_files = sorted([v for v in os.listdir(shot_path) 
                                      if v.endswith(('.mp4', '.MP4', '.avi', '.mov', '.MOV'))])
                 
+                # 如果启用control_20，限制每个shot_type最多20个样本
+                if self.control_20 and len(video_files) >= 20:
+                    random.shuffle(video_files)
+                    video_files = video_files[:20]
+                
+                if len(video_files) > 0:
+                    identity_has_data = True
+                
                 for video_file in video_files:
                     video_path = os.path.join(shot_path, video_file)
                     identity_videos[identity_folder].append({
                         'video_path': video_path,
-                        'pid': pid,
                         'identity': identity_display,
+                        'identity_folder': identity_folder,  # 临时保存
                         'shot_type': shot_type
                     })
+            
+            if identity_has_data:
+                identities_with_data.add(identity_folder)
+        
+        # shot_classification模式下自动只保留有数据的identity
+        if self.shot_classification:
+            identity_folders = sorted(list(identities_with_data))
+        
+        # 创建pid映射
+        pid_list = [identity.replace('_', ' ') for identity in identity_folders]
+        pid_to_label = {folder: label for label, folder in enumerate(identity_folders)}
         
         # 划分训练/测试集
         data = []
@@ -178,6 +232,21 @@ class BasketballVideoDataset(Dataset):
         for identity_folder, videos in identity_videos.items():
             if len(videos) == 0:
                 continue
+            
+            # shot_classification模式下：如果该identity不在有数据的列表中，跳过
+            if self.shot_classification and identity_folder not in identities_with_data:
+                continue
+            
+            # 检查identity_folder是否在pid_to_label中
+            if identity_folder not in pid_to_label:
+                continue
+            
+            pid = pid_to_label[identity_folder]
+            
+            # 更新videos中的pid
+            for video in videos:
+                video['pid'] = pid
+                del video['identity_folder']  # 删除临时字段
             
             # Identity-level split: 直接使用该identity的所有视频
             if self.identity_split:
@@ -208,6 +277,11 @@ class BasketballVideoDataset(Dataset):
         print(f"{split} Dataset ({split_mode}): {self.video_type} + {self.shot_type}")
         if self.identity_split:
             print(f"Split Mode: {self.train_identities} train IDs / {120 - self.train_identities} test IDs")
+        if self.shot_classification:
+            print(f"SHOT_CLASSIFICATION: True (auto-sync identities with both shot types)")
+        print(f"CONTROL_20: {self.control_20}")
+        if self.control_20:
+            print(f"  → Max 20 videos per identity per shot_type")
         print(f"Sample Start: {self.sample_start}")
         print(f"Split Sampling: {self.split_sampling}")  # 新增：显示分段采样状态
         if self.split_sampling:
@@ -244,10 +318,15 @@ class BasketballVideoDataset(Dataset):
         return len(self.data)
     
     def __getitem__(self, idx):
-        """Returns: video [C, T, H, W], pid, video_path"""
+        """Returns: video [C, T, H, W], pid/shot_label, video_path"""
         item = self.data[idx]
         video_path = item['video_path']
-        pid = item['pid']
+        
+        # 根据任务类型返回不同的标签
+        if self.shot_classification:
+            label = self.shot_to_label[item['shot_type']]
+        else:
+            label = item['pid']
         
         # 使用PyAV读取视频
         try:
@@ -300,7 +379,7 @@ class BasketballVideoDataset(Dataset):
         
         return {
             'video': video,
-            'pid': pid,
+            'pid': label,  # 可能是identity pid或shot_type label
             'video_path': video_path,
             'identity': item['identity'],
             'shot_type': item['shot_type']
@@ -542,6 +621,12 @@ def build_dataloader(cfg, is_train=True):
     # 从config中获取train_identities参数，默认为80
     train_identities = getattr(cfg.DATA, 'TRAIN_IDENTITIES', 80)
     
+    # 从config中获取shot_classification参数，默认为False
+    shot_classification = getattr(cfg.DATA, 'SHOT_CLASSIFICATION', False)
+    
+    # 从config中获取control_20参数，默认为False
+    control_20 = getattr(cfg.DATA, 'CONTROL_20', False)
+    
     dataset = BasketballVideoDataset(
         root=cfg.DATA.ROOT,
         video_type=cfg.DATA.VIDEO_TYPE,
@@ -555,8 +640,10 @@ def build_dataloader(cfg, is_train=True):
         sample_start=sample_start,
         split_sampling=split_sampling,
         use_presplit=use_presplit,
-        identity_split=identity_split,  # 新增参数
-        train_identities=train_identities  # 新增参数
+        identity_split=identity_split,
+        train_identities=train_identities,
+        shot_classification=shot_classification,
+        control_20=control_20
     )
     
     # 训练时使用RandomIdentitySampler
