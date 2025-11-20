@@ -83,6 +83,22 @@ class BasketballVideoDataset(Dataset):
                 # 根据shot_type加载对应的视频
                 shot_types_to_load = ['freethrow', '3pt'] if self.shot_type == 'both' else [self.shot_type]
                 
+                # 如果启用control_20，先检查所有shot_type是否都满足>=20的条件
+                if self.control_20:
+                    skip_identity = False
+                    for shot_type in shot_types_to_load:
+                        split_path = os.path.join(identity_path, shot_type, split_folder)
+                        if not os.path.exists(split_path):
+                            skip_identity = True
+                            break
+                        video_files = sorted([v for v in os.listdir(split_path) 
+                                            if v.endswith(('.mp4', '.MP4', '.avi', '.mov', '.MOV'))])
+                        if len(video_files) < 20:
+                            skip_identity = True
+                            break
+                    if skip_identity:
+                        continue  # 跳过整个identity
+                
                 identity_has_data = False  # 标记当前identity是否有数据
                 temp_videos = []  # 暂存当前identity的视频
                 
@@ -97,8 +113,8 @@ class BasketballVideoDataset(Dataset):
                     video_files = sorted([v for v in os.listdir(split_path) 
                                          if v.endswith(('.mp4', '.MP4', '.avi', '.mov', '.MOV'))])
                     
-                    # 如果启用control_20，限制每个shot_type最多20个样本
-                    if self.control_20 and len(video_files) >= 20:
+                    # 如果启用control_20，随机抽取20个
+                    if self.control_20:
                         random.shuffle(video_files)
                         video_files = video_files[:20]
                     
@@ -141,7 +157,7 @@ class BasketballVideoDataset(Dataset):
                 print(f"SHOT_CLASSIFICATION: True (auto-sync identities with both shot types)")
             print(f"CONTROL_20: {self.control_20}")
             if self.control_20:
-                print(f"  → Max 20 videos per identity per shot_type")
+                print(f"  → Only keep identities where ALL shot_types have >=20 videos")
             print(f"Sample Start: {self.sample_start}")
             print(f"Split Sampling: {self.split_sampling}")
             if self.split_sampling:
@@ -190,7 +206,24 @@ class BasketballVideoDataset(Dataset):
             # 根据shot_type加载对应的视频
             shot_types_to_load = ['freethrow', '3pt'] if self.shot_type == 'both' else [self.shot_type]
             
+            # 如果启用control_20，先检查所有shot_type是否都满足>=20的条件
+            if self.control_20:
+                skip_identity = False
+                for shot_type in shot_types_to_load:
+                    shot_path = os.path.join(identity_path, shot_type)
+                    if not os.path.exists(shot_path):
+                        skip_identity = True
+                        break
+                    video_files_check = sorted([v for v in os.listdir(shot_path) 
+                                        if v.endswith(('.mp4', '.MP4', '.avi', '.mov', '.MOV'))])
+                    if len(video_files_check) < 20:
+                        skip_identity = True
+                        break
+                if skip_identity:
+                    continue  # 跳过整个identity
+            
             identity_has_data = False
+            
             for shot_type in shot_types_to_load:
                 shot_path = os.path.join(identity_path, shot_type)
                 
@@ -201,8 +234,8 @@ class BasketballVideoDataset(Dataset):
                 video_files = sorted([v for v in os.listdir(shot_path) 
                                      if v.endswith(('.mp4', '.MP4', '.avi', '.mov', '.MOV'))])
                 
-                # 如果启用control_20，限制每个shot_type最多20个样本
-                if self.control_20 and len(video_files) >= 20:
+                # 如果启用control_20，随机抽取20个
+                if self.control_20:
                     random.shuffle(video_files)
                     video_files = video_files[:20]
                 
@@ -284,7 +317,7 @@ class BasketballVideoDataset(Dataset):
             print(f"SHOT_CLASSIFICATION: True (auto-sync identities with both shot types)")
         print(f"CONTROL_20: {self.control_20}")
         if self.control_20:
-            print(f"  → Max 20 videos per identity per shot_type")
+            print(f"  → Only keep identities where ALL shot_types have >=20 videos")
         print(f"Sample Start: {self.sample_start}")
         print(f"Split Sampling: {self.split_sampling}")  # 新增：显示分段采样状态
         if self.split_sampling:
