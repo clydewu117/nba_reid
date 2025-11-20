@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 """
-Evaluation metrics for Basketball ReID (Rank-1, mAP)
+Evaluation metrics for Basketball ReID (Rank-1, mAP) and Classification (Accuracy, F1)
 Simplified version without camera IDs
 """
 
 import numpy as np
 import torch
 from scipy.spatial.distance import cdist
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support, confusion_matrix
 
 
 def evaluate_rank(distmat, q_pids, g_pids, max_rank=50):
@@ -118,3 +119,62 @@ class R1_mAP_eval(object):
         distmat = cdist(qf, gf, metric='euclidean')
         cmc, mAP = evaluate_rank(distmat, q_pids, g_pids, self.max_rank)
         return cmc, mAP
+
+
+class ClassificationEvaluator(object):
+    """
+    Evaluator for binary classification task (e.g., freethrow vs 3pt).
+    Computes Accuracy, Precision, Recall, F1-score, and Confusion Matrix.
+    """
+    def __init__(self, num_classes=2):
+        self.num_classes = num_classes
+        self.reset()
+
+    def reset(self):
+        """Reset internal storage."""
+        self.preds, self.labels = [], []
+
+    def update(self, pred, label):
+        """
+        Update with new batch of predictions.
+        
+        Args:
+            pred: Predicted logits or probabilities (batch_size, num_classes)
+            label: Ground truth labels (batch_size,)
+        """
+        # Convert logits to predictions
+        if pred.dim() == 2:
+            pred = torch.argmax(pred, dim=1)
+        
+        self.preds.extend(pred.cpu().numpy())
+        self.labels.extend(label.cpu().numpy())
+
+    def compute(self):
+        """
+        Compute classification metrics.
+        
+        Returns:
+            metrics: Dictionary containing:
+                - accuracy: Overall accuracy
+                - precision: Per-class precision (macro-averaged)
+                - recall: Per-class recall (macro-averaged)
+                - f1: Per-class F1-score (macro-averaged)
+                - confusion_matrix: Confusion matrix
+        """
+        preds = np.asarray(self.preds)
+        labels = np.asarray(self.labels)
+        
+        # Compute metrics
+        acc = accuracy_score(labels, preds)
+        precision, recall, f1, _ = precision_recall_fscore_support(
+            labels, preds, average='macro', zero_division=0
+        )
+        cm = confusion_matrix(labels, preds)
+        
+        return {
+            'accuracy': acc,
+            'precision': precision,
+            'recall': recall,
+            'f1': f1,
+            'confusion_matrix': cm
+        }

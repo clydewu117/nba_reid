@@ -123,55 +123,125 @@ def train_one_epoch(cfg, model, train_loader, optimizer, loss_fn, scaler, epoch,
 # ----------------------------
 @torch.no_grad()
 def test(cfg, model, query_loader, gallery_loader, device, epoch=None):
+    """
+    Test function supporting both ReID and Classification modes.
+    
+    For ReID: Uses query/gallery split and computes Rank-1, mAP
+    For Classification: Uses full test set and computes Accuracy, F1
+    """
     model.eval()
-    evaluator = R1_mAP_eval(len(query_loader.dataset), max_rank=50, feat_norm=True)
-    evaluator.reset()
-
-    print(f"\nExtracting query features ({len(query_loader.dataset)})...")
-    for batch in query_loader:
-        videos = batch['video'].to(device)
-        pids = batch['pid'].to(device)
-        
-        with autocast():
-            feat = model(videos)  # 测试模式返回 [B, 512] 特征
-        
-        evaluator.update((feat, pids))
-
-    print(f"Extracting gallery features ({len(gallery_loader.dataset)})...")
-    for batch in gallery_loader:
-        videos = batch['video'].to(device)
-        pids = batch['pid'].to(device)
-        
-        with autocast():
-            feat = model(videos)
-        
-        evaluator.update((feat, pids))
-
-    cmc, mAP = evaluator.compute()
     
-    # Extract Rank-1, Rank-5, Rank-10
-    rank1 = cmc[0]
-    rank5 = cmc[4] if len(cmc) > 4 else cmc[-1]
-    rank10 = cmc[9] if len(cmc) > 9 else cmc[-1]
+    # Check if in classification mode
+    is_classification = getattr(cfg.DATA, 'SHOT_CLASSIFICATION', False)
     
-    print(f"\n{'='*60}")
-    print(f"Validation Results:")
-    print(f"  mAP     : {mAP:.2%}")
-    print(f"  Rank-1  : {rank1:.2%}")
-    print(f"  Rank-5  : {rank5:.2%}")
-    print(f"  Rank-10 : {rank10:.2%}")
-    print(f"{'='*60}\n")
+    if is_classification:
+        # Classification mode evaluation
+        from metrics import ClassificationEvaluator
+        evaluator = ClassificationEvaluator(num_classes=2)
+        evaluator.reset()
+        
+        print(f"\nEvaluating classification on test set ({len(query_loader.dataset) + len(gallery_loader.dataset)} samples)...")
+        
+        # Process query set
+        for batch in query_loader:
+            videos = batch['video'].to(device)
+            labels = batch['pid'].to(device)  # In classification mode, pid is actually shot_type label
+            
+            with autocast():
+                logits, _ = model(videos, label=None, training=False)  # Get logits only
+            
+            evaluator.update(logits, labels)
+        
+        # Process gallery set
+        for batch in gallery_loader:
+            videos = batch['video'].to(device)
+            labels = batch['pid'].to(device)
+            
+            with autocast():
+                logits, _ = model(videos, label=None, training=False)
+            
+            evaluator.update(logits, labels)
+        
+        # Compute classification metrics
+        metrics = evaluator.compute()
+        acc = metrics['accuracy']
+        precision = metrics['precision']
+        recall = metrics['recall']
+        f1 = metrics['f1']
+        cm = metrics['confusion_matrix']
+        
+        print(f"\n{'='*60}")
+        print(f"Classification Results:")
+        print(f"  Accuracy  : {acc:.2%}")
+        print(f"  Precision : {precision:.2%}")
+        print(f"  Recall    : {recall:.2%}")
+        print(f"  F1-score  : {f1:.2%}")
+        print(f"\nConfusion Matrix:")
+        print(f"  {cm}")
+        print(f"  (0: freethrow, 1: 3pt)")
+        print(f"{'='*60}\n")
+        
+        if epoch is not None:
+            wandb.log({
+                'test/accuracy': acc,
+                'test/precision': precision,
+                'test/recall': recall,
+                'test/f1': f1,
+                'epoch': epoch
+            })
+        
+        return acc, f1, precision, recall
+    
+    else:
+        # ReID mode evaluation
+        evaluator = R1_mAP_eval(len(query_loader.dataset), max_rank=50, feat_norm=True)
+        evaluator.reset()
 
-    if epoch is not None:
-        wandb.log({
-            'test/mAP': mAP, 
-            'test/rank1': rank1,
-            'test/rank5': rank5,
-            'test/rank10': rank10,
-            'epoch': epoch
-        })
-    
-    return rank1, mAP, rank5, rank10
+        print(f"\nExtracting query features ({len(query_loader.dataset)})...")
+        for batch in query_loader:
+            videos = batch['video'].to(device)
+            pids = batch['pid'].to(device)
+            
+            with autocast():
+                feat = model(videos)  # 测试模式返回 [B, 512] 特征
+            
+            evaluator.update((feat, pids))
+
+        print(f"Extracting gallery features ({len(gallery_loader.dataset)})...")
+        for batch in gallery_loader:
+            videos = batch['video'].to(device)
+            pids = batch['pid'].to(device)
+            
+            with autocast():
+                feat = model(videos)
+            
+            evaluator.update((feat, pids))
+
+        cmc, mAP = evaluator.compute()
+        
+        # Extract Rank-1, Rank-5, Rank-10
+        rank1 = cmc[0]
+        rank5 = cmc[4] if len(cmc) > 4 else cmc[-1]
+        rank10 = cmc[9] if len(cmc) > 9 else cmc[-1]
+        
+        print(f"\n{'='*60}")
+        print(f"Validation Results:")
+        print(f"  mAP     : {mAP:.2%}")
+        print(f"  Rank-1  : {rank1:.2%}")
+        print(f"  Rank-5  : {rank5:.2%}")
+        print(f"  Rank-10 : {rank10:.2%}")
+        print(f"{'='*60}\n")
+
+        if epoch is not None:
+            wandb.log({
+                'test/mAP': mAP, 
+                'test/rank1': rank1,
+                'test/rank5': rank5,
+                'test/rank10': rank10,
+                'epoch': epoch
+            })
+        
+        return rank1, mAP, rank5, rank10
 
 
 # ----------------------------
@@ -339,7 +409,13 @@ def train(cfg):
     )
     
     scaler = GradScaler()
-    best_rank1, best_mAP, best_rank5, best_rank10 = 0.0, 0.0, 0.0, 0.0
+    
+    # Initialize best metrics based on task mode
+    is_classification = getattr(cfg.DATA, 'SHOT_CLASSIFICATION', False)
+    if is_classification:
+        best_acc, best_f1, best_precision, best_recall = 0.0, 0.0, 0.0, 0.0
+    else:
+        best_rank1, best_mAP, best_rank5, best_rank10 = 0.0, 0.0, 0.0, 0.0
 
     print("\n" + "=" * 80)
     print("Start training...")
@@ -374,32 +450,62 @@ def train(cfg):
         
         # 评估
         if epoch % cfg.SOLVER.EVAL_PERIOD == 0:
-            rank1, mAP, rank5, rank10 = test(cfg, model, q_loader, g_loader, device, epoch)
-            
-            # 保存最佳模型
-            is_best = rank1 > best_rank1
-            if is_best:
-                best_rank1, best_mAP, best_rank5, best_rank10 = rank1, mAP, rank5, rank10
+            if is_classification:
+                # Classification mode
+                acc, f1, precision, recall = test(cfg, model, q_loader, g_loader, device, epoch)
                 
-                checkpoint = {
-                    'epoch': epoch,
-                    'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'scheduler_state_dict': scheduler.state_dict(),
-                    'rank1': rank1,
-                    'mAP': mAP,
-                    'rank5': rank5,
-                    'rank10': rank10,
-                    'config': cfg
-                }
+                # 保存最佳模型
+                is_best = acc > best_acc
+                if is_best:
+                    best_acc, best_f1, best_precision, best_recall = acc, f1, precision, recall
+                    
+                    checkpoint = {
+                        'epoch': epoch,
+                        'model_state_dict': model.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'scheduler_state_dict': scheduler.state_dict(),
+                        'accuracy': acc,
+                        'f1': f1,
+                        'precision': precision,
+                        'recall': recall,
+                        'config': cfg
+                    }
+                    
+                    torch.save(checkpoint, os.path.join(cfg.OUTPUT_DIR, 'best_model.pth'))
+                    
+                    print(f"\n✅ Saved best model at epoch {epoch}")
+                    print(f"  Accuracy  : {acc:.2%}")
+                    print(f"  F1-score  : {f1:.2%}")
+                    print(f"  Precision : {precision:.2%}")
+                    print(f"  Recall    : {recall:.2%}")
+            else:
+                # ReID mode
+                rank1, mAP, rank5, rank10 = test(cfg, model, q_loader, g_loader, device, epoch)
                 
-                torch.save(checkpoint, os.path.join(cfg.OUTPUT_DIR, 'best_model.pth'))
-                
-                print(f"\n✅ Saved best model at epoch {epoch}")
-                print(f"  Rank-1  : {rank1:.2%}")
-                print(f"  Rank-5  : {rank5:.2%}")
-                print(f"  Rank-10 : {rank10:.2%}")
-                print(f"  mAP     : {mAP:.2%}")
+                # 保存最佳模型
+                is_best = rank1 > best_rank1
+                if is_best:
+                    best_rank1, best_mAP, best_rank5, best_rank10 = rank1, mAP, rank5, rank10
+                    
+                    checkpoint = {
+                        'epoch': epoch,
+                        'model_state_dict': model.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'scheduler_state_dict': scheduler.state_dict(),
+                        'rank1': rank1,
+                        'mAP': mAP,
+                        'rank5': rank5,
+                        'rank10': rank10,
+                        'config': cfg
+                    }
+                    
+                    torch.save(checkpoint, os.path.join(cfg.OUTPUT_DIR, 'best_model.pth'))
+                    
+                    print(f"\n✅ Saved best model at epoch {epoch}")
+                    print(f"  Rank-1  : {rank1:.2%}")
+                    print(f"  Rank-5  : {rank5:.2%}")
+                    print(f"  Rank-10 : {rank10:.2%}")
+                    print(f"  mAP     : {mAP:.2%}")
             
             # # 每隔一定epoch也保存checkpoint
             # if epoch % (cfg.SOLVER.EVAL_PERIOD * 5) == 0:
@@ -415,10 +521,16 @@ def train(cfg):
 
     print("\n" + "=" * 80)
     print("Training Completed! Best Results:")
-    print(f"  Rank-1  : {best_rank1:.2%}")
-    print(f"  Rank-5  : {best_rank5:.2%}")
-    print(f"  Rank-10 : {best_rank10:.2%}")
-    print(f"  mAP     : {best_mAP:.2%}")
+    if is_classification:
+        print(f"  Accuracy  : {best_acc:.2%}")
+        print(f"  F1-score  : {best_f1:.2%}")
+        print(f"  Precision : {best_precision:.2%}")
+        print(f"  Recall    : {best_recall:.2%}")
+    else:
+        print(f"  Rank-1  : {best_rank1:.2%}")
+        print(f"  Rank-5  : {best_rank5:.2%}")
+        print(f"  Rank-10 : {best_rank10:.2%}")
+        print(f"  mAP     : {best_mAP:.2%}")
     print("=" * 80)
     
     wandb.finish()
