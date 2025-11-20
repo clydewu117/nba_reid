@@ -13,14 +13,11 @@
 
 set -x
 
-CSV_PATH=/fs/scratch/PAS3184/v3/train_test_split.csv
-CONFIG_PATH=/users/PAS2985/cz2128/ReID/nba_reid-cam/configs/config_videomaev2.yaml
+CSV_PATH=/fs/scratch/PAS3184/v3/color_train_test_split.csv
+CONFIG_PATH=/users/PAS2985/cz2128/ReID/nba_reid/outputs/v3color/VideoMAEv2_mask_beginning_nosplitsampling/config.yaml
 OUTPUT_ROOT=/fs/scratch/PAS3184/v3_cam
 MODEL_NAME=VideoMAEv2
-CHECKPOINTS="\
-  /path/to/videomaev2_checkpoint1.pth \
-  /path/to/videomaev2_checkpoint2.pth \
-  "
+CHECKPOINTS="/users/PAS2985/cz2128/ReID/nba_reid/outputs/v3color/VideoMAEv2_mask_beginning_nosplitsampling/VideoMAEv2_color_mask_beginning_nosplitsampling.pth"
 
 cd /users/PAS2985/cz2128/ReID/nba_reid-cam
 python batch_videomaev2_cam.py \
@@ -29,6 +26,6 @@ python batch_videomaev2_cam.py \
   --output-root "$OUTPUT_ROOT" \
   --model-name "$MODEL_NAME" \
   --sampling uniform \
-  --modality appearance \
-  --methods originalcam scorecam \
+  --modality mask \
+  --methods originalcam \
   --checkpoints "$CHECKPOINTS"

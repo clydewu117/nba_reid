@@ -129,8 +129,9 @@ dmypy.json
 .pyre/__pycache__/
 *.pyc
 
+# Custom
 outputs/
-
 checkpoints/
-
 test_results/
+slurm_output/
+test.sh
