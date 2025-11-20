@@ -54,6 +54,9 @@ class BasketballVideoDataset(Dataset):
             # Shot分类任务：2类 (freethrow=0, 3pt=1)
             self.num_classes = 2
             self.shot_to_label = {'freethrow': 0, '3pt': 1}
+            
+            # 保护机制：验证分类模式配置
+            self._validate_classification_mode()
         else:
             # Identity ReID任务
             self.num_classes = len(self.pid_list)
@@ -385,6 +388,47 @@ class BasketballVideoDataset(Dataset):
             'shot_type': item['shot_type']
         }
     
+    def _validate_classification_mode(self):
+        """验证分类模式的配置和数据正确性"""
+        # 1. 验证shot_type必须为'both'
+        if self.shot_type != 'both':
+            raise ValueError(
+                f"[Classification Mode Error] SHOT_TYPE must be 'both' for classification task, "
+                f"but got '{self.shot_type}'. Please set cfg.DATA.SHOT_TYPE = 'both'"
+            )
+        
+        # 2. 验证数据集中确实包含两种shot类型
+        shot_types_in_data = set(item['shot_type'] for item in self.data)
+        expected_shot_types = {'freethrow', '3pt'}
+        
+        if shot_types_in_data != expected_shot_types:
+            missing = expected_shot_types - shot_types_in_data
+            extra = shot_types_in_data - expected_shot_types
+            error_msg = "[Classification Mode Error] Data validation failed:\n"
+            if missing:
+                error_msg += f"  - Missing shot types: {missing}\n"
+            if extra:
+                error_msg += f"  - Unexpected shot types: {extra}\n"
+            error_msg += f"  - Expected: {expected_shot_types}\n"
+            error_msg += f"  - Found: {shot_types_in_data}"
+            raise ValueError(error_msg)
+        
+        # 3. 验证每种shot类型都有足够的样本
+        shot_type_counts = {'freethrow': 0, '3pt': 0}
+        for item in self.data:
+            shot_type_counts[item['shot_type']] += 1
+        
+        split = 'Train' if self.is_train else 'Test'
+        print(f"\n{'='*60}")
+        print(f"[Classification Mode Validation] {split} Set")
+        print(f"  ✓ SHOT_TYPE = 'both'")
+        print(f"  ✓ Found 2 shot classes: freethrow, 3pt")
+        print(f"  ✓ Sample distribution:")
+        print(f"      - freethrow: {shot_type_counts['freethrow']} samples")
+        print(f"      - 3pt: {shot_type_counts['3pt']} samples")
+        print(f"  ✓ Total samples: {len(self.data)}")
+        print(f"{'='*60}\n")
+    
     def _get_sampling_range(self, total_frames):
         """
         根据sample_start参数确定采样范围
@@ -673,6 +717,13 @@ def build_dataloader(cfg, is_train=True):
             pin_memory=True,
             drop_last=is_train,
             collate_fn=collate_fn
+        )
+    
+    # 分类模式额外验证：num_classes必须为2
+    if shot_classification and dataset.num_classes != 2:
+        raise ValueError(
+            f"[Classification Mode Error] Expected num_classes=2, but got {dataset.num_classes}. "
+            f"This indicates a data loading error."
         )
     
     return dataloader, dataset.num_classes

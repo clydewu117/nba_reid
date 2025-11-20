@@ -26,11 +26,12 @@ class VideoMAEReIDHead(nn.Module):
     BNNeck-style head with optional projection to a target embedding dimension.
     """
 
-    def __init__(self, in_dim: int, num_classes: int, embed_dim: int = 512, neck_feat: str = "after") -> None:
+    def __init__(self, in_dim: int, num_classes: int, embed_dim: int = 512, neck_feat: str = "after", is_classification: bool = False) -> None:
         super().__init__()
         self.num_classes = num_classes
         self.embed_dim = embed_dim
         self.neck_feat = neck_feat
+        self.is_classification = is_classification
 
         self.feat_proj = nn.Linear(in_dim, embed_dim)
         self.bottleneck = nn.BatchNorm1d(embed_dim)
@@ -59,7 +60,14 @@ class VideoMAEReIDHead(nn.Module):
             cls_score = self.classifier(bn_feat)
             return cls_score, bn_feat, feat
         else:
-            return feat
+            # Testing mode
+            if self.is_classification:
+                # Classification task: return logits
+                cls_score = self.classifier(bn_feat)
+                return cls_score
+            else:
+                # ReID task: return normalized feature
+                return feat
 
 
 @MODEL_REGISTRY.register()
@@ -140,12 +148,14 @@ class VideoMAEv2ReID(nn.Module):
         num_classes = int(getattr(cfg.MODEL, "NUM_CLASSES", 0))
         neck_feat = getattr(cfg.REID, "NECK_FEAT", "after") if hasattr(cfg, "REID") else "after"
         embed_dim = getattr(cfg.REID, "EMBED_DIM", 512) if hasattr(cfg, "REID") else 512
+        is_classification = getattr(cfg.DATA, 'SHOT_CLASSIFICATION', False)
 
         self.reid_head = VideoMAEReIDHead(
             in_dim=in_dim,
             num_classes=num_classes,
             embed_dim=embed_dim,
             neck_feat=neck_feat,
+            is_classification=is_classification,
         )
 
     def forward(self, x: torch.Tensor, label=None):

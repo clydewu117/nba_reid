@@ -165,16 +165,13 @@ class TimeSformerReID(nn.Module):
         # ReID head
         self.feat_dim = embed_dim
         self.neck_feat = cfg.REID.NECK_FEAT if hasattr(cfg, "REID") else "after"
-        self.embed_dim = (
-            cfg.REID.EMBED_DIM
-            if hasattr(cfg, "REID") and hasattr(cfg.REID, "EMBED_DIM")
-            else 512
-        )
+        is_classification = getattr(cfg.DATA, 'SHOT_CLASSIFICATION', False)
+        
         self.reid_head = ReIDHead(
             in_dim=self.feat_dim,
             num_classes=num_classes,
-            embed_dim=self.embed_dim,
             neck_feat=self.neck_feat,
+            is_classification=is_classification,
         )
 
     def forward(self, x, label=None):

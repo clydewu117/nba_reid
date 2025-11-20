@@ -43,10 +43,11 @@ class ReIDHead(nn.Module):
     """
     ReID Head with BNNeck (Single Branch)
     """
-    def __init__(self, in_dim, num_classes, neck_feat='after'):
+    def __init__(self, in_dim, num_classes, neck_feat='after', is_classification=False):
         super().__init__()
         self.num_classes = num_classes
         self.neck_feat = neck_feat
+        self.is_classification = is_classification
         
         # BNNeck
         self.bottleneck = nn.BatchNorm1d(in_dim)
@@ -62,8 +63,9 @@ class ReIDHead(nn.Module):
         Args:
             features: [B, 768] global features from backbone
         Returns:
-            Training: dict with 'cls_score', 'bn_feat', 'feat'
-            Testing: normalized features [B, 768]
+            Training: (cls_score, bn_feat, feat)
+            Testing (ReID): normalized features [B, 768]
+            Testing (Classification): cls_score [B, num_classes]
         """
         # BNNeck
         bn_feat = self.bottleneck(features)  # [B, 768]
@@ -77,11 +79,17 @@ class ReIDHead(nn.Module):
             cls_score = self.classifier(bn_feat)
             return cls_score, bn_feat, feat
         else:
-            # Testing: return normalized feature
-            if self.neck_feat == 'after':
-                return F.normalize(bn_feat, p=2, dim=1)
+            # Testing mode
+            if self.is_classification:
+                # Classification task: return logits for accuracy computation
+                cls_score = self.classifier(bn_feat)
+                return cls_score
             else:
-                return F.normalize(features, p=2, dim=1)
+                # ReID task: return normalized feature for distance computation
+                if self.neck_feat == 'after':
+                    return F.normalize(bn_feat, p=2, dim=1)
+                else:
+                    return F.normalize(features, p=2, dim=1)
 			
 
 # 添加初始化函数
@@ -239,10 +247,14 @@ class MViTReID(nn.Module):
 			cfg.REID.EMBED_DIM if hasattr(cfg, "REID") and hasattr(cfg.REID, "EMBED_DIM") else 512
 		)
 
+		# Check if in classification mode
+		is_classification = getattr(cfg.DATA, 'SHOT_CLASSIFICATION', False)
+		
 		self.reid_head = ReIDHead(
 			in_dim=self.feat_dim,
 			num_classes=num_classes,
 			neck_feat=self.neck_feat,
+			is_classification=is_classification,
 		)
 
 	@torch.no_grad()

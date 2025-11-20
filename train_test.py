@@ -132,16 +132,8 @@ def test(cfg, model, query_loader, gallery_loader, device, epoch=None):
     # Check if in classification mode
     is_classification = getattr(cfg.DATA, 'SHOT_CLASSIFICATION', False)
     
-    if is_classification:
-        # Classification mode: keep model.training=True to get cls_score
-        # But disable dropout for deterministic evaluation
-        model.train()
-        for m in model.modules():
-            if isinstance(m, torch.nn.Dropout):
-                m.eval()
-    else:
-        # ReID mode: use eval mode to get features
-        model.eval()
+    # Always use eval mode for testing (model will handle output format based on is_classification flag)
+    model.eval()
     
     if is_classification:
         # Classification mode evaluation
@@ -157,19 +149,15 @@ def test(cfg, model, query_loader, gallery_loader, device, epoch=None):
             labels = batch['pid'].to(device)  # In classification mode, pid is actually shot_type label
             
             with autocast():
-                outputs = model(videos, label=labels)
-                # Handle both dict output (training) and tensor output (eval)
-                if isinstance(outputs, dict):
-                    logits = outputs['cls_score']
-                else:
-                    logits = outputs  # Assume direct tensor output
+                # In eval mode with is_classification=True, model returns cls_score directly
+                logits = model(videos)
                 
-                # Debug: check logits shape and values
+                # Validation: check logits shape
                 if logits.dim() == 1 or (logits.dim() == 2 and logits.size(1) != 2):
-                    print(f"WARNING: Unexpected logits shape: {logits.shape}")
-                    print(f"  Expected: [batch_size, 2], Got: {logits.shape}")
-                    print(f"  This suggests model is returning features instead of classification logits!")
-                    break
+                    raise RuntimeError(
+                        f"[Classification Mode Error] Unexpected logits shape: {logits.shape}. "
+                        f"Expected: [batch_size, 2]. Model might not be in classification mode."
+                    )
             
             evaluator.update(logits, labels)
         
@@ -440,6 +428,35 @@ def train(cfg):
     print("\n" + "=" * 80)
     print("Start training...")
     print("=" * 80)
+    
+    # 分类模式：验证第一个batch的label
+    if is_classification:
+        print("\n[Classification Mode] Validating first batch...")
+        first_batch = next(iter(train_loader))
+        first_labels = first_batch['pid'].numpy()
+        first_shot_types = first_batch['shot_types']
+        
+        unique_labels = set(first_labels)
+        unique_shot_types = set(first_shot_types)
+        
+        print(f"  ✓ Label range: {unique_labels}")
+        print(f"  ✓ Shot types in batch: {unique_shot_types}")
+        
+        # 验证label只有0和1
+        if not unique_labels.issubset({0, 1}):
+            raise ValueError(
+                f"[Classification Mode Error] Labels must be in {{0, 1}}, "
+                f"but found: {unique_labels}"
+            )
+        
+        # 验证shot_types只有freethrow和3pt
+        if not unique_shot_types.issubset({'freethrow', '3pt'}):
+            raise ValueError(
+                f"[Classification Mode Error] Shot types must be in {{'freethrow', '3pt'}}, "
+                f"but found: {unique_shot_types}"
+            )
+        
+        print(f"  ✓ First batch validation passed!\n")
 
     # 训练循环
     for epoch in range(1, cfg.SOLVER.MAX_EPOCHS + 1):
