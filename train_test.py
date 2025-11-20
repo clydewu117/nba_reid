@@ -51,7 +51,7 @@ def set_seed(seed):
 # ----------------------------
 # Train One Epoch
 # ----------------------------
-def train_one_epoch(cfg, model, train_loader, optimizer, loss_fn, scaler, epoch, device):
+def train_one_epoch(cfg, model, train_loader, optimizer, loss_fn, scaler, epoch, device, global_step):
     model.train()
     batch_time, data_time = AverageMeter(), AverageMeter()
     losses, id_losses, triplet_losses = AverageMeter(), AverageMeter(), AverageMeter()
@@ -94,6 +94,9 @@ def train_one_epoch(cfg, model, train_loader, optimizer, loss_fn, scaler, epoch,
 
         batch_time.update(time.time() - end)
         end = time.time()
+        
+        # 递增全局step计数器
+        global_step += 1
 
         # 日志输出
         if (batch_idx + 1) % cfg.SOLVER.LOG_PERIOD == 0:
@@ -107,15 +110,16 @@ def train_one_epoch(cfg, model, train_loader, optimizer, loss_fn, scaler, epoch,
                 'train/batch_loss': losses.val,
                 'train/batch_id_loss': id_losses.val,
                 'train/batch_triplet_loss': triplet_losses.val,
-                'train/lr': optimizer.param_groups[0]['lr']
-            })
+                'train/lr': optimizer.param_groups[0]['lr'],
+                'train/epoch': epoch
+            }, step=global_step)
 
     return {
         'loss': losses.avg,
         'id_loss': id_losses.avg,
         'triplet_loss': triplet_losses.avg,
         'batch_time': batch_time.avg
-    }
+    }, global_step
 
 
 # ----------------------------
@@ -424,6 +428,9 @@ def train(cfg):
         best_acc, best_f1, best_precision, best_recall = 0.0, 0.0, 0.0, 0.0
     else:
         best_rank1, best_mAP, best_rank5, best_rank10 = 0.0, 0.0, 0.0, 0.0
+    
+    # Initialize global step counter for wandb
+    global_step = 0
 
     print("\n" + "=" * 80)
     print("Start training...")
@@ -465,8 +472,8 @@ def train(cfg):
         print(f"{'='*80}")
         
         # 训练一个epoch
-        train_metrics = train_one_epoch(
-            cfg, model, train_loader, optimizer, loss_fn, scaler, epoch, device
+        train_metrics, global_step = train_one_epoch(
+            cfg, model, train_loader, optimizer, loss_fn, scaler, epoch, device, global_step
         )
         
         print(f"\nEpoch {epoch} Summary:")
@@ -479,9 +486,10 @@ def train(cfg):
         wandb.log({
             'train/epoch_loss': train_metrics['loss'],
             'train/epoch_id_loss': train_metrics['id_loss'],
-            'train/epoch_triplet_loss': train_metrics['triplet_loss'],
-            'epoch': epoch
-        })
+            'train/epoch_triplet_loss': train_metrics['triplet_loss']
+        }, step=global_step, commit=False)
+        
+        wandb.log({'epoch': epoch}, step=global_step)
 
         scheduler.step()
         
