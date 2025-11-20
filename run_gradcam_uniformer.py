@@ -19,6 +19,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 import torch
+import yaml
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -31,103 +32,118 @@ logger = logging.get_logger(__name__)
 
 
 def load_config(config_path, num_classes=None):
-    """Load YACS config from file."""
+    """Load YACS config from YAML file with safe defaults."""
+    yaml_cfg = {}
+    if config_path and os.path.exists(config_path):
+        with open(config_path, "r") as f:
+            yaml_cfg = yaml.safe_load(f) or {}
+
     cfg = CN()
 
     # Data config
     cfg.DATA = CN()
-    cfg.DATA.BATCH_SIZE = 16
-    cfg.DATA.NUM_FRAMES = 16
-    cfg.DATA.HEIGHT = 224
-    cfg.DATA.WIDTH = 224
-    cfg.DATA.NUM_WORKERS = 4
-    cfg.DATA.FRAME_STRIDE = 4
-    cfg.DATA.NUM_INSTANCES = 4
-    cfg.DATA.ROOT = ""
-    cfg.DATA.SHOT_TYPE = ""
-    cfg.DATA.TRAIN_RATIO = 0.7
-    cfg.DATA.USE_SAMPLER = True
-    cfg.DATA.VIDEO_TYPE = ""
-    cfg.DATA.SAMPLE_START = "beginning"  # New field: beginning/middle/end
-    cfg.DATA.SPLIT_SAMPLING = False  # New field: split sampling strategy
-    cfg.DATA.USE_PRESPLIT = False  # New field: use pre-split data
+    data_cfg = yaml_cfg.get("DATA", {})
+    cfg.DATA.BATCH_SIZE = data_cfg.get("BATCH_SIZE", 16)
+    cfg.DATA.NUM_FRAMES = data_cfg.get("NUM_FRAMES", 16)
+    cfg.DATA.HEIGHT = data_cfg.get("HEIGHT", 224)
+    cfg.DATA.WIDTH = data_cfg.get("WIDTH", 224)
+    cfg.DATA.NUM_WORKERS = data_cfg.get("NUM_WORKERS", 4)
+    cfg.DATA.FRAME_STRIDE = data_cfg.get("FRAME_STRIDE", 4)
+    cfg.DATA.NUM_INSTANCES = data_cfg.get("NUM_INSTANCES", 4)
+    cfg.DATA.ROOT = data_cfg.get("ROOT", "")
+    cfg.DATA.SHOT_TYPE = data_cfg.get("SHOT_TYPE", "")
+    cfg.DATA.TRAIN_RATIO = data_cfg.get("TRAIN_RATIO", 0.7)
+    cfg.DATA.USE_SAMPLER = data_cfg.get("USE_SAMPLER", True)
+    cfg.DATA.VIDEO_TYPE = data_cfg.get("VIDEO_TYPE", "")
+    cfg.DATA.SAMPLE_START = data_cfg.get("SAMPLE_START", "beginning")
+    cfg.DATA.SPLIT_SAMPLING = data_cfg.get("SPLIT_SAMPLING", False)
+    cfg.DATA.USE_PRESPLIT = data_cfg.get("USE_PRESPLIT", False)
 
     # Model config
     cfg.MODEL = CN()
-    cfg.MODEL.ARCH = "uniformerv2"
-    cfg.MODEL.MODEL_NAME = "Uniformerv2ReID"
-    cfg.MODEL.NAME = "Uniformerv2ReID"
-    cfg.MODEL.NUM_CLASSES = num_classes if num_classes is not None else 0
-    cfg.MODEL.USE_CHECKPOINT = True
-    cfg.MODEL.CHECKPOINT_NUM = [0]
+    model_cfg = yaml_cfg.get("MODEL", {})
+    cfg.MODEL.ARCH = model_cfg.get("ARCH", "uniformerv2")
+    cfg.MODEL.MODEL_NAME = model_cfg.get("MODEL_NAME", "Uniformerv2ReID")
+    cfg.MODEL.NAME = model_cfg.get("NAME", "Uniformerv2ReID")
+    cfg.MODEL.NUM_CLASSES = (
+        num_classes if num_classes is not None else model_cfg.get("NUM_CLASSES", 0)
+    )
+    cfg.MODEL.USE_CHECKPOINT = model_cfg.get("USE_CHECKPOINT", True)
+    cfg.MODEL.CHECKPOINT_NUM = model_cfg.get("CHECKPOINT_NUM", [0])
 
     # UniFormerV2 config (12-layer UniFormerV2-B/16)
     cfg.UNIFORMERV2 = CN()
-    cfg.UNIFORMERV2.BACKBONE = "uniformerv2_b16"
-    cfg.UNIFORMERV2.N_LAYERS = 12  # Fixed: 12 layers for UniFormerV2-B/16
-    cfg.UNIFORMERV2.N_DIM = 768
-    cfg.UNIFORMERV2.N_HEAD = 12
-    cfg.UNIFORMERV2.MLP_FACTOR = 4.0
-    cfg.UNIFORMERV2.BACKBONE_DROP_PATH_RATE = 0.0
-    cfg.UNIFORMERV2.DROP_PATH_RATE = 0.0
-    cfg.UNIFORMERV2.MLP_DROPOUT = [0.5] * 12  # 12 layers
-    cfg.UNIFORMERV2.CLS_DROPOUT = 0.5
-    cfg.UNIFORMERV2.RETURN_LIST = [8, 9, 10, 11]  # Last 4 layers for global attention
-    cfg.UNIFORMERV2.TEMPORAL_DOWNSAMPLE = False
-    cfg.UNIFORMERV2.DW_REDUCTION = 1.5
-    cfg.UNIFORMERV2.NO_LMHRA = False
-    cfg.UNIFORMERV2.DOUBLE_LMHRA = True
-    cfg.UNIFORMERV2.PRETRAIN = ""
-    cfg.UNIFORMERV2.FROZEN = False
+    uniformer_cfg = yaml_cfg.get("UNIFORMERV2", {})
+    cfg.UNIFORMERV2.BACKBONE = uniformer_cfg.get("BACKBONE", "uniformerv2_b16")
+    cfg.UNIFORMERV2.N_LAYERS = uniformer_cfg.get("N_LAYERS", 12)
+    cfg.UNIFORMERV2.N_DIM = uniformer_cfg.get("N_DIM", 768)
+    cfg.UNIFORMERV2.N_HEAD = uniformer_cfg.get("N_HEAD", 12)
+    cfg.UNIFORMERV2.MLP_FACTOR = uniformer_cfg.get("MLP_FACTOR", 4.0)
+    cfg.UNIFORMERV2.BACKBONE_DROP_PATH_RATE = uniformer_cfg.get(
+        "BACKBONE_DROP_PATH_RATE", 0.0
+    )
+    cfg.UNIFORMERV2.DROP_PATH_RATE = uniformer_cfg.get("DROP_PATH_RATE", 0.0)
+    cfg.UNIFORMERV2.MLP_DROPOUT = uniformer_cfg.get(
+        "MLP_DROPOUT", [0.5] * cfg.UNIFORMERV2.N_LAYERS
+    )
+    cfg.UNIFORMERV2.CLS_DROPOUT = uniformer_cfg.get("CLS_DROPOUT", 0.5)
+    cfg.UNIFORMERV2.RETURN_LIST = uniformer_cfg.get("RETURN_LIST", [8, 9, 10, 11])
+    cfg.UNIFORMERV2.TEMPORAL_DOWNSAMPLE = uniformer_cfg.get("TEMPORAL_DOWNSAMPLE", False)
+    cfg.UNIFORMERV2.DW_REDUCTION = uniformer_cfg.get("DW_REDUCTION", 1.5)
+    cfg.UNIFORMERV2.NO_LMHRA = uniformer_cfg.get("NO_LMHRA", False)
+    cfg.UNIFORMERV2.DOUBLE_LMHRA = uniformer_cfg.get("DOUBLE_LMHRA", True)
+    cfg.UNIFORMERV2.PRETRAIN = uniformer_cfg.get("PRETRAIN", "")
+    cfg.UNIFORMERV2.FROZEN = uniformer_cfg.get("FROZEN", False)
 
     # ReID config
     cfg.REID = CN()
-    cfg.REID.EMBED_DIM = 512
-    cfg.REID.NECK_FEAT = "after"
+    reid_cfg = yaml_cfg.get("REID", {})
+    cfg.REID.EMBED_DIM = reid_cfg.get("EMBED_DIM", 512)
+    cfg.REID.NECK_FEAT = reid_cfg.get("NECK_FEAT", "after")
 
     # Loss config
     cfg.LOSS = CN()
-    cfg.LOSS.ID_WEIGHT = 1.0
-    cfg.LOSS.TRIPLET_WEIGHT = 1.0
-    cfg.LOSS.TRIPLET_MARGIN = 0.3
-    cfg.LOSS.TRIPLET_DISTANCE = "euclidean"
-    cfg.LOSS.USE_TRIPLET = True
-    cfg.LOSS.USE_LABEL_SMOOTH = True
-    cfg.LOSS.LABEL_SMOOTH_EPSILON = 0.1
+    loss_cfg = yaml_cfg.get("LOSS", {})
+    cfg.LOSS.ID_WEIGHT = loss_cfg.get("ID_WEIGHT", 1.0)
+    cfg.LOSS.TRIPLET_WEIGHT = loss_cfg.get("TRIPLET_WEIGHT", 1.0)
+    cfg.LOSS.TRIPLET_MARGIN = loss_cfg.get("TRIPLET_MARGIN", 0.3)
+    cfg.LOSS.TRIPLET_DISTANCE = loss_cfg.get("TRIPLET_DISTANCE", "euclidean")
+    cfg.LOSS.USE_TRIPLET = loss_cfg.get("USE_TRIPLET", True)
+    cfg.LOSS.USE_LABEL_SMOOTH = loss_cfg.get("USE_LABEL_SMOOTH", True)
+    cfg.LOSS.LABEL_SMOOTH_EPSILON = loss_cfg.get("LABEL_SMOOTH_EPSILON", 0.1)
 
     # Solver config
     cfg.SOLVER = CN()
-    cfg.SOLVER.BASE_LR = 0.0001
-    cfg.SOLVER.OPTIMIZER = "AdamW"
-    cfg.SOLVER.MOMENTUM = 0.9
-    cfg.SOLVER.WEIGHT_DECAY = 0.05
-    cfg.SOLVER.WARMUP_EPOCHS = 50
-    cfg.SOLVER.MAX_EPOCHS = 100
-    cfg.SOLVER.STEPS = [40, 70]
-    cfg.SOLVER.GAMMA = 0.1
-    cfg.SOLVER.COSINE_AFTER_WARMUP = True
-    cfg.SOLVER.COSINE_END_LR = 1e-6
-    cfg.SOLVER.CHECKPOINT_PERIOD = 10
-    cfg.SOLVER.EVAL_PERIOD = 1
-    cfg.SOLVER.LOG_PERIOD = 1
+    solver_cfg = yaml_cfg.get("SOLVER", {})
+    cfg.SOLVER.BASE_LR = solver_cfg.get("BASE_LR", 0.0001)
+    cfg.SOLVER.OPTIMIZER = solver_cfg.get("OPTIMIZER", "AdamW")
+    cfg.SOLVER.MOMENTUM = solver_cfg.get("MOMENTUM", 0.9)
+    cfg.SOLVER.WEIGHT_DECAY = solver_cfg.get("WEIGHT_DECAY", 0.05)
+    cfg.SOLVER.WARMUP_EPOCHS = solver_cfg.get("WARMUP_EPOCHS", 50)
+    cfg.SOLVER.MAX_EPOCHS = solver_cfg.get("MAX_EPOCHS", 100)
+    cfg.SOLVER.STEPS = solver_cfg.get("STEPS", [40, 70])
+    cfg.SOLVER.GAMMA = solver_cfg.get("GAMMA", 0.1)
+    cfg.SOLVER.COSINE_AFTER_WARMUP = solver_cfg.get("COSINE_AFTER_WARMUP", True)
+    cfg.SOLVER.COSINE_END_LR = solver_cfg.get("COSINE_END_LR", 1e-6)
+    cfg.SOLVER.CHECKPOINT_PERIOD = solver_cfg.get("CHECKPOINT_PERIOD", 10)
+    cfg.SOLVER.EVAL_PERIOD = solver_cfg.get("EVAL_PERIOD", 1)
+    cfg.SOLVER.LOG_PERIOD = solver_cfg.get("LOG_PERIOD", 1)
     cfg.SOLVER.CLIP_GRADIENTS = CN()
-    cfg.SOLVER.CLIP_GRADIENTS.ENABLED = True
-    cfg.SOLVER.CLIP_GRADIENTS.CLIP_VALUE = 1.0
+    clip_cfg = solver_cfg.get("CLIP_GRADIENTS", {})
+    cfg.SOLVER.CLIP_GRADIENTS.ENABLED = clip_cfg.get("ENABLED", True)
+    cfg.SOLVER.CLIP_GRADIENTS.CLIP_VALUE = clip_cfg.get("CLIP_VALUE", 1.0)
 
     # Test config
     cfg.TEST = CN()
-    cfg.TEST.BATCH_SIZE = 16
-    cfg.TEST.WEIGHT = ""
+    test_cfg = yaml_cfg.get("TEST", {})
+    cfg.TEST.BATCH_SIZE = test_cfg.get("BATCH_SIZE", 16)
+    cfg.TEST.WEIGHT = test_cfg.get("WEIGHT", "")
 
     # Other configs
-    cfg.NUM_GPUS = 1
-    cfg.GPU_IDS = [0]
-    cfg.OUTPUT_DIR = ""
-    cfg.SEED = 42
-
-    # Merge from file if exists
-    if config_path and os.path.exists(config_path):
-        cfg.merge_from_file(config_path)
+    cfg.NUM_GPUS = yaml_cfg.get("NUM_GPUS", 1)
+    cfg.GPU_IDS = yaml_cfg.get("GPU_IDS", [0])
+    cfg.OUTPUT_DIR = yaml_cfg.get("OUTPUT_DIR", "")
+    cfg.SEED = yaml_cfg.get("SEED", 42)
 
     cfg.freeze()
     return cfg

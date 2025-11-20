@@ -13,16 +13,13 @@
 
 set -x
 
-CSV_PATH=/fs/scratch/PAS3184/v3/train_test_split.csv
-CONFIG_PATH=/users/PAS2985/cz2128/ReID/nba_reid-cam/configs/config_uniformerv2.yaml
+CSV_PATH=/fs/scratch/PAS3184/v3/shot_train_test_split_ctrl20.csv
+CONFIG_PATH="/users/PAS2985/lei441/nba_reid/outputs/appearance_k400_16frames_motionclassify_ctrl20/config.yaml"
 OUTPUT_ROOT=/fs/scratch/PAS3184/v3_cam
 MODEL_NAME=UniFormerV2
-CHECKPOINTS="\
-  /path/to/uniformerv2_checkpoint1.pth \
-  /path/to/uniformerv2_checkpoint2.pth \
-"
+CHECKPOINTS="/users/PAS2985/lei441/nba_reid/outputs/appearance_k400_16frames_motionclassify_ctrl20/appearance_k400_16frames_motionclassify_ctrl20.pth"
 
-cd /users/PAS2985/cz2128/ReID/nba_reid-cam
+cd /users/PAS2985/lei441/nba_reid-cam
 python batch_uniformerv2_cam.py \
   --csv "$CSV_PATH" \
   --config "$CONFIG_PATH" \
@@ -30,5 +27,5 @@ python batch_uniformerv2_cam.py \
   --model-name "$MODEL_NAME" \
   --sampling uniform \
   --modality appearance \
-  --methods originalcam scorecam \
+  --methods originalcam \
   --checkpoints "$CHECKPOINTS"
