@@ -129,10 +129,19 @@ def test(cfg, model, query_loader, gallery_loader, device, epoch=None):
     For ReID: Uses query/gallery split and computes Rank-1, mAP
     For Classification: Uses full test set and computes Accuracy, F1
     """
-    model.eval()
-    
     # Check if in classification mode
     is_classification = getattr(cfg.DATA, 'SHOT_CLASSIFICATION', False)
+    
+    if is_classification:
+        # Classification mode: keep model.training=True to get cls_score
+        # But disable dropout for deterministic evaluation
+        model.train()
+        for m in model.modules():
+            if isinstance(m, torch.nn.Dropout):
+                m.eval()
+    else:
+        # ReID mode: use eval mode to get features
+        model.eval()
     
     if is_classification:
         # Classification mode evaluation
@@ -154,6 +163,13 @@ def test(cfg, model, query_loader, gallery_loader, device, epoch=None):
                     logits = outputs['cls_score']
                 else:
                     logits = outputs  # Assume direct tensor output
+                
+                # Debug: check logits shape and values
+                if logits.dim() == 1 or (logits.dim() == 2 and logits.size(1) != 2):
+                    print(f"WARNING: Unexpected logits shape: {logits.shape}")
+                    print(f"  Expected: [batch_size, 2], Got: {logits.shape}")
+                    print(f"  This suggests model is returning features instead of classification logits!")
+                    break
             
             evaluator.update(logits, labels)
         
