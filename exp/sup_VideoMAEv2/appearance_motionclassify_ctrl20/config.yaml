@@ -5,7 +5,7 @@ DATA:
   NUM_FRAMES: 16
   NUM_WORKERS: 1
   ROOT: /fs/scratch/PAS3184/v3
-  SHOT_TYPE: freethrow
+  SHOT_TYPE: both
   TRAIN_RATIO: 0.7
   VIDEO_TYPE: appearance
   WIDTH: 224

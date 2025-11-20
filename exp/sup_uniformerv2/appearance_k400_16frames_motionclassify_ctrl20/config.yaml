@@ -7,7 +7,7 @@ DATA:
   NUM_WORKERS: 4
   ROOT: /fs/scratch/PAS3184/v3
   SAMPLE_START: beginning
-  SHOT_TYPE: freethrow
+  SHOT_TYPE: both
   SPLIT_SAMPLING: false
   TRAIN_RATIO: 0.7
   USE_PRESPLIT: false
