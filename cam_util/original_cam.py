@@ -63,8 +63,29 @@ class OriginalCAM:
         self.spatial_features = None
 
         # Forward pass in eval mode (no gradients needed!)
-        with torch.no_grad():
-            output = self.model(input_tensor)
+        # Ensure ReID heads emit logits during inference for CAM computation.
+        reid_head = getattr(self.model, "reid_head", None)
+        if reid_head is None and hasattr(self.model, "module"):
+            reid_head = getattr(self.model.module, "reid_head", None)
+        toggled_classification = False
+
+        if (
+            reid_head is not None
+            and hasattr(reid_head, "is_classification")
+            and not reid_head.is_classification
+        ):
+            toggled_classification = True
+            original_mode = reid_head.is_classification
+            reid_head.is_classification = True
+        else:
+            original_mode = None
+
+        try:
+            with torch.no_grad():
+                output = self.model(input_tensor)
+        finally:
+            if toggled_classification and original_mode is not None:
+                reid_head.is_classification = original_mode
 
         # Handle dict or tensor output
         logits = None
