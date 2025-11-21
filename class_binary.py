@@ -90,8 +90,8 @@ def test_binary_classification(cfg, model, test_loader, device):
     tn, fp, fn, tp = cm.ravel()
     
     # Precision, Recall, F1 for each class
-    precision_class0 = tn / (tn + fn) if (tn + fn) > 0 else 0.0
-    recall_class0 = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+    precision_class0 = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+    recall_class0 = tn / (tn + fn) if (tn + fn) > 0 else 0.0
     f1_class0 = 2 * precision_class0 * recall_class0 / (precision_class0 + recall_class0) if (precision_class0 + recall_class0) > 0 else 0.0
     
     precision_class1 = tp / (tp + fp) if (tp + fp) > 0 else 0.0
