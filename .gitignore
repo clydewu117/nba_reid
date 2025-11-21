@@ -9,6 +9,8 @@ test_run/
 scripts/
 train_test.sh
 test_performance.sh
+class_binary.sh
+reid_80_40.sh
 
 __pycache__/
 config/__pycache__/
