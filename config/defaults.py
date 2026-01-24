@@ -11,48 +11,53 @@ _C = CfgNode()
 # Data
 # -----------------------------------------------------------------------------
 _C.DATA = CfgNode()
-_C.DATA.ROOT = '/fs/scratch/PAS3184/v3'
-_C.DATA.VIDEO_TYPE = 'mask'         # 'appearance' or 'mask'
-_C.DATA.SHOT_TYPE = 'freethrow'     # 'freethrow', '3pt', or 'both'
-_C.DATA.NUM_FRAMES = 16             # 每个视频采样的帧数
-_C.DATA.FRAME_STRIDE = 4            # 帧采样间隔（RRS采样中不使用，保留兼容性）
+_C.DATA.ROOT = "/fs/scratch/PAS3184/v3"
+_C.DATA.VIDEO_TYPE = "mask"  # 'appearance' or 'mask'
+_C.DATA.SHOT_TYPE = "freethrow"  # 'freethrow', '3pt', or 'both'
+_C.DATA.NUM_FRAMES = 16  # 每个视频采样的帧数
+_C.DATA.FRAME_STRIDE = 4  # 帧采样间隔（RRS采样中不使用，保留兼容性）
 _C.DATA.HEIGHT = 224
 _C.DATA.WIDTH = 224
-_C.DATA.BATCH_SIZE = 64             # 使用sampler时建议64
+_C.DATA.BATCH_SIZE = 64  # 使用sampler时建议64
 _C.DATA.NUM_WORKERS = 4
-_C.DATA.TRAIN_RATIO = 0.7           # 训练集比例 70%
-_C.DATA.SAMPLE_START = 'middle'
+_C.DATA.TRAIN_RATIO = 0.7  # 训练集比例 70%
+_C.DATA.SAMPLE_START = "middle"
 _C.DATA.SPLIT_SAMPLING = False
 _C.DATA.USE_PRESPLIT = False
 # Sampler配置（用于Triplet Loss训练）
-_C.DATA.USE_SAMPLER = True          # 是否使用RandomIdentitySampler
-_C.DATA.NUM_INSTANCES = 4           # 每个identity在batch中的样本数（P*K中的K）
-                                    # batch_size必须能被num_instances整除
-                                    # 例如: batch_size=64, num_instances=4 → 每个batch有16个不同的identity
+_C.DATA.USE_SAMPLER = True  # 是否使用RandomIdentitySampler
+_C.DATA.NUM_INSTANCES = 4  # 每个identity在batch中的样本数（P*K中的K）
+# batch_size必须能被num_instances整除
+# 例如: batch_size=64, num_instances=4 → 每个batch有16个不同的identity
 
-_C.DATA.IDENTITY_SPLIT = False      # 是否启用identity-level划分
-_C.DATA.TRAIN_IDENTITIES = 80       # 训练集identity数量
-_C.DATA.SHOT_CLASSIFICATION = False # 是否进行shot_type分类而不是identity ReID (freethrow vs 3pt, 自动只计数有两种数据的identity)
-_C.DATA.CONTROL_20 = False          # 是否控制每个identity每个shot_type最多20个视频样本（用于消除数据量差异影响）
+_C.DATA.IDENTITY_SPLIT = False  # 是否启用identity-level划分
+_C.DATA.TRAIN_IDENTITIES = 80  # 训练集identity数量
+_C.DATA.SHOT_CLASSIFICATION = False  # 是否进行shot_type分类而不是identity ReID (freethrow vs 3pt, 自动只计数有两种数据的identity)
+_C.DATA.CONTROL_20 = (
+    False  # 是否控制每个identity每个shot_type最多20个视频样本（用于消除数据量差异影响）
+)
+_C.DATA.NUM_SPLIT = None  # 使用固定的N个球员子集进行训练，可选值: 40, 80, 120, None (None表示使用全部球员)
 
 # -----------------------------------------------------------------------------
 # Model
 # -----------------------------------------------------------------------------
 _C.MODEL = CfgNode()
-_C.MODEL.NAME = 'Uniformerv2ReID'
+_C.MODEL.NAME = "Uniformerv2ReID"
 _C.MODEL.MODEL_NAME = _C.MODEL.NAME
-_C.MODEL.NUM_CLASSES = 0            # 自动从数据集获取
+_C.MODEL.NUM_CLASSES = 0  # 自动从数据集获取
 _C.MODEL.USE_CHECKPOINT = True
 _C.MODEL.CHECKPOINT_NUM = [0, 0, 8, 0]
-_C.MODEL.ARCH = 'uniformerv2'
+_C.MODEL.ARCH = "uniformerv2"
 
 # -----------------------------------------------------------------------------
 # VideoMAEv2
 # -----------------------------------------------------------------------------
 _C.VIDEOMAEV2 = CfgNode()
-_C.VIDEOMAEV2.MODEL = 'vit_base_patch16_224'
-_C.VIDEOMAEV2.PRETRAIN = '/users/PAS2985/cz2128/ReID/VideoMAEv2/model_zoo/vit_b_k710_dl_from_giant.pth'
-_C.VIDEOMAEV2.MODEL_KEY = 'model|module|state_dict'
+_C.VIDEOMAEV2.MODEL = "vit_base_patch16_224"
+_C.VIDEOMAEV2.PRETRAIN = (
+    "/users/PAS2985/cz2128/ReID/VideoMAEv2/model_zoo/vit_b_k710_dl_from_giant.pth"
+)
+_C.VIDEOMAEV2.MODEL_KEY = "model|module|state_dict"
 _C.VIDEOMAEV2.TUBELET_SIZE = 2
 _C.VIDEOMAEV2.DROP_RATE = 0.0
 _C.VIDEOMAEV2.ATTN_DROP_RATE = 0.0
@@ -68,8 +73,10 @@ _C.VIDEOMAEV2.FROZEN = False
 # UniFormerV2
 # -----------------------------------------------------------------------------
 _C.UNIFORMERV2 = CfgNode()
-_C.UNIFORMERV2.BACKBONE = 'uniformerv2_b16'
-_C.UNIFORMERV2.PRETRAIN = '/users/PAS2985/lei441/unireid/uniformerv2_k700_vit-b16_frame8.pth'
+_C.UNIFORMERV2.BACKBONE = "uniformerv2_b16"
+_C.UNIFORMERV2.PRETRAIN = (
+    "/users/PAS2985/lei441/unireid/uniformerv2_k700_vit-b16_frame8.pth"
+)
 _C.UNIFORMERV2.FROZEN = True
 _C.UNIFORMERV2.N_LAYERS = 12
 _C.UNIFORMERV2.N_DIM = 768
@@ -98,7 +105,9 @@ _C.TIMESFORMER.PATCH_SIZE = 16
 _C.TIMESFORMER.DROP_PATH_RATE = 0.1
 _C.TIMESFORMER.EMBED_DIM = 768
 _C.TIMESFORMER.FROZEN = False
-_C.TIMESFORMER.BACKBONE_IMPL = "official"  # force official implementation; local lite impl is disabled
+_C.TIMESFORMER.BACKBONE_IMPL = (
+    "official"  # force official implementation; local lite impl is disabled
+)
 
 # -----------------------------------------------------------------------------
 # MViT (SlowFast) - minimal knobs for ReID backbone
@@ -160,14 +169,14 @@ _C.MVIT.POOL_Q_STRIDE = [
 # ReID
 # -----------------------------------------------------------------------------
 _C.REID = CfgNode()
-_C.REID.NECK_FEAT = 'after'     # 'after' or 'before'
-_C.REID.EMBED_DIM = 512         # Embedding dimension
+_C.REID.NECK_FEAT = "after"  # 'after' or 'before'
+_C.REID.EMBED_DIM = 512  # Embedding dimension
 
 # -----------------------------------------------------------------------------
 # Solver
 # -----------------------------------------------------------------------------
 _C.SOLVER = CfgNode()
-_C.SOLVER.OPTIMIZER = 'AdamW'
+_C.SOLVER.OPTIMIZER = "AdamW"
 _C.SOLVER.BASE_LR = 0.00001
 _C.SOLVER.WEIGHT_DECAY = 0.0001
 _C.SOLVER.MOMENTUM = 0.9
@@ -194,7 +203,7 @@ _C.LOSS.USE_LABEL_SMOOTH = True
 _C.LOSS.LABEL_SMOOTH_EPSILON = 0.1
 _C.LOSS.USE_TRIPLET = True
 _C.LOSS.TRIPLET_MARGIN = 0.3
-_C.LOSS.TRIPLET_DISTANCE = 'euclidean'
+_C.LOSS.TRIPLET_DISTANCE = "euclidean"
 _C.LOSS.ID_WEIGHT = 1.0
 _C.LOSS.TRIPLET_WEIGHT = 1.0
 
@@ -203,12 +212,12 @@ _C.LOSS.TRIPLET_WEIGHT = 1.0
 # -----------------------------------------------------------------------------
 _C.TEST = CfgNode()
 _C.TEST.BATCH_SIZE = 16
-_C.TEST.WEIGHT = ''
+_C.TEST.WEIGHT = ""
 
 # -----------------------------------------------------------------------------
 # Misc
 # -----------------------------------------------------------------------------
-_C.OUTPUT_DIR = './outputs/basketball_reid'
+_C.OUTPUT_DIR = "./outputs/basketball_reid"
 _C.SEED = 42
 _C.GPU_IDS = [0]
 _C.NUM_GPUS = 1
@@ -223,57 +232,58 @@ def get_cfg_defaults():
 # 预定义配置
 # -----------------------------------------------------------------------------
 
+
 def get_appearance_freethrow_config():
     """Appearance + Freethrow only"""
     cfg = get_cfg_defaults()
-    cfg.DATA.VIDEO_TYPE = 'appearance'
-    cfg.DATA.SHOT_TYPE = 'freethrow'
-    cfg.OUTPUT_DIR = './outputs/appearance_freethrow'
+    cfg.DATA.VIDEO_TYPE = "appearance"
+    cfg.DATA.SHOT_TYPE = "freethrow"
+    cfg.OUTPUT_DIR = "./outputs/appearance_freethrow"
     return cfg
 
 
 def get_appearance_3pt_config():
     """Appearance + 3pt only"""
     cfg = get_cfg_defaults()
-    cfg.DATA.VIDEO_TYPE = 'appearance'
-    cfg.DATA.SHOT_TYPE = '3pt'
-    cfg.OUTPUT_DIR = './outputs/appearance_3pt'
+    cfg.DATA.VIDEO_TYPE = "appearance"
+    cfg.DATA.SHOT_TYPE = "3pt"
+    cfg.OUTPUT_DIR = "./outputs/appearance_3pt"
     return cfg
 
 
 def get_appearance_both_config():
     """Appearance + Both shot types"""
     cfg = get_cfg_defaults()
-    cfg.DATA.VIDEO_TYPE = 'appearance'
-    cfg.DATA.SHOT_TYPE = 'both'
-    cfg.OUTPUT_DIR = './outputs/appearance_both'
+    cfg.DATA.VIDEO_TYPE = "appearance"
+    cfg.DATA.SHOT_TYPE = "both"
+    cfg.OUTPUT_DIR = "./outputs/appearance_both"
     return cfg
 
 
 def get_mask_freethrow_config():
     """Mask + Freethrow only"""
     cfg = get_cfg_defaults()
-    cfg.DATA.VIDEO_TYPE = 'mask'
-    cfg.DATA.SHOT_TYPE = 'freethrow'
-    cfg.OUTPUT_DIR = './outputs/mask_freethrow'
+    cfg.DATA.VIDEO_TYPE = "mask"
+    cfg.DATA.SHOT_TYPE = "freethrow"
+    cfg.OUTPUT_DIR = "./outputs/mask_freethrow"
     return cfg
 
 
 def get_mask_3pt_config():
     """Mask + 3pt only"""
     cfg = get_cfg_defaults()
-    cfg.DATA.VIDEO_TYPE = 'mask'
-    cfg.DATA.SHOT_TYPE = '3pt'
-    cfg.OUTPUT_DIR = './outputs/mask_3pt'
+    cfg.DATA.VIDEO_TYPE = "mask"
+    cfg.DATA.SHOT_TYPE = "3pt"
+    cfg.OUTPUT_DIR = "./outputs/mask_3pt"
     return cfg
 
 
 def get_mask_both_config():
     """Mask + Both shot types"""
     cfg = get_cfg_defaults()
-    cfg.DATA.VIDEO_TYPE = 'mask'
-    cfg.DATA.SHOT_TYPE = 'both'
-    cfg.OUTPUT_DIR = './outputs/mask_both'
+    cfg.DATA.VIDEO_TYPE = "mask"
+    cfg.DATA.SHOT_TYPE = "both"
+    cfg.OUTPUT_DIR = "./outputs/mask_both"
     return cfg
 
 
@@ -281,18 +291,19 @@ def get_mask_both_config():
 # Sampler专用配置
 # -----------------------------------------------------------------------------
 
+
 def get_appearance_both_with_sampler_config():
     """
     Appearance + Both shot types + RandomIdentitySampler
     推荐用于Triplet Loss训练
     """
     cfg = get_cfg_defaults()
-    cfg.DATA.VIDEO_TYPE = 'appearance'
-    cfg.DATA.SHOT_TYPE = 'both'
+    cfg.DATA.VIDEO_TYPE = "appearance"
+    cfg.DATA.SHOT_TYPE = "both"
     cfg.DATA.USE_SAMPLER = True
     cfg.DATA.NUM_INSTANCES = 4
     cfg.DATA.BATCH_SIZE = 64  # 64 = 16 identities × 4 instances
-    cfg.OUTPUT_DIR = './outputs/appearance_both_sampler'
+    cfg.OUTPUT_DIR = "./outputs/appearance_both_sampler"
     return cfg
 
 
@@ -302,33 +313,33 @@ def get_mask_both_with_sampler_config():
     推荐用于Triplet Loss训练
     """
     cfg = get_cfg_defaults()
-    cfg.DATA.VIDEO_TYPE = 'mask'
-    cfg.DATA.SHOT_TYPE = 'both'
+    cfg.DATA.VIDEO_TYPE = "mask"
+    cfg.DATA.SHOT_TYPE = "both"
     cfg.DATA.USE_SAMPLER = True
     cfg.DATA.NUM_INSTANCES = 4
     cfg.DATA.BATCH_SIZE = 64
-    cfg.OUTPUT_DIR = './outputs/mask_both_sampler'
+    cfg.OUTPUT_DIR = "./outputs/mask_both_sampler"
     return cfg
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # 测试不同配置
     configs = [
-        ('Default', get_cfg_defaults()),
-        ('Appearance + Freethrow', get_appearance_freethrow_config()),
-        ('Appearance + 3pt', get_appearance_3pt_config()),
-        ('Appearance + Both', get_appearance_both_config()),
-        ('Appearance + Both + Sampler', get_appearance_both_with_sampler_config()),
-        ('Mask + Freethrow', get_mask_freethrow_config()),
-        ('Mask + 3pt', get_mask_3pt_config()),
-        ('Mask + Both', get_mask_both_config()),
-        ('Mask + Both + Sampler', get_mask_both_with_sampler_config()),
+        ("Default", get_cfg_defaults()),
+        ("Appearance + Freethrow", get_appearance_freethrow_config()),
+        ("Appearance + 3pt", get_appearance_3pt_config()),
+        ("Appearance + Both", get_appearance_both_config()),
+        ("Appearance + Both + Sampler", get_appearance_both_with_sampler_config()),
+        ("Mask + Freethrow", get_mask_freethrow_config()),
+        ("Mask + 3pt", get_mask_3pt_config()),
+        ("Mask + Both", get_mask_both_config()),
+        ("Mask + Both + Sampler", get_mask_both_with_sampler_config()),
     ]
-    
-    print("="*80)
+
+    print("=" * 80)
     print("Basketball Video ReID Configurations")
-    print("="*80)
-    
+    print("=" * 80)
+
     for name, cfg in configs:
         print(f"\n{'='*60}")
         print(f"{name}")
@@ -339,5 +350,7 @@ if __name__ == '__main__':
         print(f"Use Sampler: {cfg.DATA.USE_SAMPLER}")
         if cfg.DATA.USE_SAMPLER:
             print(f"Num Instances: {cfg.DATA.NUM_INSTANCES}")
-            print(f"Num Identities per batch: {cfg.DATA.BATCH_SIZE // cfg.DATA.NUM_INSTANCES}")
+            print(
+                f"Num Identities per batch: {cfg.DATA.BATCH_SIZE // cfg.DATA.NUM_INSTANCES}"
+            )
         print(f"Output Dir: {cfg.OUTPUT_DIR}")
