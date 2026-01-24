@@ -44,21 +44,26 @@ def test_binary_classification(cfg, model, test_loader, device):
     print(f"Binary Classification Testing...")
     print(f"{'='*60}\n")
     
-    # Unified feature extraction across different backbones (e.g., Uniformer, MViT)
-    def _extract_features(videos_tensor):
-        # Prefer model-specific eval feature path if available (e.g., MViTReID)
-        if hasattr(model, "_forward_features_eval") and callable(getattr(model, "_forward_features_eval")):
-            return model._forward_features_eval(videos_tensor)
-        # Fallback to calling backbone directly (e.g., Uniformerv2ReID)
-        return model.backbone(videos_tensor)
-
     for batch in tqdm(test_loader, desc="Extracting"):
         videos = batch['video'].to(device)
         pids = batch['pid'].to(device)
         
-        features = _extract_features(videos)
-        bn_feat = model.reid_head.bottleneck(features)
-        cls_score = model.reid_head.classifier(bn_feat)
+        outputs = model(videos)
+
+        if isinstance(outputs, dict):
+            if "cls_score" in outputs:
+                cls_score = outputs["cls_score"]
+            elif "logits" in outputs:
+                cls_score = outputs["logits"]
+            elif "bn_feat" in outputs:
+                cls_score = model.reid_head.classifier(outputs["bn_feat"])
+            else:
+                raise RuntimeError("Model eval output dict missing classification logits.")
+        elif isinstance(outputs, (list, tuple)):
+            cls_score = outputs[0]
+        else:
+            cls_score = outputs
+
         probs = F.softmax(cls_score, dim=1)
         
         # For binary classification, predict class with highest probability

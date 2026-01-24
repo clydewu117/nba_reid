@@ -12,31 +12,31 @@ _C = CfgNode()
 # -----------------------------------------------------------------------------
 _C.DATA = CfgNode()
 _C.DATA.ROOT = "/fs/scratch/PAS3184/v3"
-_C.DATA.VIDEO_TYPE = "mask"  # 'appearance' or 'mask'
-_C.DATA.SHOT_TYPE = "freethrow"  # 'freethrow', '3pt', or 'both'
-_C.DATA.NUM_FRAMES = 16  # 每个视频采样的帧数
-_C.DATA.FRAME_STRIDE = 4  # 帧采样间隔（RRS采样中不使用，保留兼容性）
+_C.DATA.VIDEO_TYPE = "mask"             # 'appearance' or 'mask'
+_C.DATA.SHOT_TYPE = "freethrow"         # 'freethrow', '3pt', or 'both'
+_C.DATA.NUM_FRAMES = 16                 # 每个视频采样的帧数
+_C.DATA.FRAME_STRIDE = 4                # 帧采样间隔（RRS采样中不使用，保留兼容性）
 _C.DATA.HEIGHT = 224
 _C.DATA.WIDTH = 224
-_C.DATA.BATCH_SIZE = 64  # 使用sampler时建议64
+_C.DATA.BATCH_SIZE = 64                 # 使用sampler时建议64
 _C.DATA.NUM_WORKERS = 4
-_C.DATA.TRAIN_RATIO = 0.7  # 训练集比例 70%
+_C.DATA.TRAIN_RATIO = 0.7               # 训练集比例 70%
 _C.DATA.SAMPLE_START = "middle"
 _C.DATA.SPLIT_SAMPLING = False
 _C.DATA.USE_PRESPLIT = False
 # Sampler配置（用于Triplet Loss训练）
-_C.DATA.USE_SAMPLER = True  # 是否使用RandomIdentitySampler
-_C.DATA.NUM_INSTANCES = 4  # 每个identity在batch中的样本数（P*K中的K）
+_C.DATA.USE_SAMPLER = True              # 是否使用RandomIdentitySampler
+_C.DATA.NUM_INSTANCES = 4               # 每个identity在batch中的样本数（P*K中的K）
 # batch_size必须能被num_instances整除
 # 例如: batch_size=64, num_instances=4 → 每个batch有16个不同的identity
 
-_C.DATA.IDENTITY_SPLIT = False  # 是否启用identity-level划分
-_C.DATA.TRAIN_IDENTITIES = 80  # 训练集identity数量
-_C.DATA.SHOT_CLASSIFICATION = False  # 是否进行shot_type分类而不是identity ReID (freethrow vs 3pt, 自动只计数有两种数据的identity)
+_C.DATA.IDENTITY_SPLIT = False          # 是否启用identity-level划分
+_C.DATA.TRAIN_IDENTITIES = 80           # 训练集identity数量
+_C.DATA.SHOT_CLASSIFICATION = False     # 是否进行shot_type分类而不是identity ReID (freethrow vs 3pt, 自动只计数有两种数据的identity)
 _C.DATA.CONTROL_20 = (
-    False  # 是否控制每个identity每个shot_type最多20个视频样本（用于消除数据量差异影响）
+    False                               # 是否控制每个identity每个shot_type最多20个视频样本（用于消除数据量差异影响）
 )
-_C.DATA.NUM_SPLIT = None  # 使用固定的N个球员子集进行训练，可选值: 40, 80, 120, None (None表示使用全部球员)
+_C.DATA.NUM_SPLIT = None                # 使用固定的N个球员子集进行训练，可选值: 40, 80, 120, None (None表示使用全部球员)
 
 # -----------------------------------------------------------------------------
 # Model
@@ -44,7 +44,7 @@ _C.DATA.NUM_SPLIT = None  # 使用固定的N个球员子集进行训练，可选
 _C.MODEL = CfgNode()
 _C.MODEL.NAME = "Uniformerv2ReID"
 _C.MODEL.MODEL_NAME = _C.MODEL.NAME
-_C.MODEL.NUM_CLASSES = 0  # 自动从数据集获取
+_C.MODEL.NUM_CLASSES = 0                # 自动从数据集获取
 _C.MODEL.USE_CHECKPOINT = True
 _C.MODEL.CHECKPOINT_NUM = [0, 0, 8, 0]
 _C.MODEL.ARCH = "uniformerv2"
@@ -96,17 +96,17 @@ _C.UNIFORMERV2.DOUBLE_LMHRA = True
 # TimeSformer
 # -----------------------------------------------------------------------------
 _C.TIMESFORMER = CfgNode()
-_C.TIMESFORMER.REPO_PATH = ""  # optional absolute path to local TimeSformer repo
+_C.TIMESFORMER.REPO_PATH = ""       # optional absolute path to local TimeSformer repo
 _C.TIMESFORMER.PRETRAIN = "/users/PAS2099/clydewu117/nba_reid/checkpoints/timesformer/TimeSformer_divST_8x32_224_K400.pyth"  # optional pretrained checkpoint (.pyth / .pth)
 _C.TIMESFORMER.ATTENTION_TYPE = (
-    "divided_space_time"  # 'divided_space_time' | 'space_only' | 'joint_space_time'
+    "divided_space_time"            # 'divided_space_time' | 'space_only' | 'joint_space_time'
 )
 _C.TIMESFORMER.PATCH_SIZE = 16
 _C.TIMESFORMER.DROP_PATH_RATE = 0.1
 _C.TIMESFORMER.EMBED_DIM = 768
 _C.TIMESFORMER.FROZEN = False
 _C.TIMESFORMER.BACKBONE_IMPL = (
-    "official"  # force official implementation; local lite impl is disabled
+    "official"                      # force official implementation; local lite impl is disabled
 )
 
 # -----------------------------------------------------------------------------
@@ -114,8 +114,8 @@ _C.TIMESFORMER.BACKBONE_IMPL = (
 # -----------------------------------------------------------------------------
 _C.MVIT = CfgNode()
 _C.MVIT.PRETRAIN = "/users/PAS2099/clydewu117/nba_reid/checkpoints/mvitv2/MViTv2_S_16x4_k400_f302660347.pyth"  # optional SlowFast checkpoint path
-_C.MVIT.FROZEN = False  # freeze backbone
-_C.MVIT.USE_MEAN_POOLING = False  # use mean of patch tokens instead of CLS
+_C.MVIT.FROZEN = False              # freeze backbone
+_C.MVIT.USE_MEAN_POOLING = False    # use mean of patch tokens instead of CLS
 
 # Default MViTv2-S (16x4, 224) backbone config to match SlowFast checkpoints and avoid OOM
 # Reference: SlowFast configs/Kinetics/MVITv2_S_16x4.yaml
@@ -169,8 +169,8 @@ _C.MVIT.POOL_Q_STRIDE = [
 # ReID
 # -----------------------------------------------------------------------------
 _C.REID = CfgNode()
-_C.REID.NECK_FEAT = "after"  # 'after' or 'before'
-_C.REID.EMBED_DIM = 512  # Embedding dimension
+_C.REID.NECK_FEAT = "after"     # 'after' or 'before'
+_C.REID.EMBED_DIM = 512         # Embedding dimension
 
 # -----------------------------------------------------------------------------
 # Solver

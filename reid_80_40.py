@@ -130,9 +130,20 @@ def test_reid(cfg, model, query_loader, gallery_loader, device):
         videos = batch['video'].to(device)
         pids = batch['pid'].to(device)
         
-        features = _extract_features(videos)
-        bn_feat = model.reid_head.bottleneck(features)
-        feat_norm = F.normalize(bn_feat, p=2, dim=1)
+        outputs = model(videos)
+        if isinstance(outputs, dict):
+            if "feat" in outputs:
+                feat_norm = outputs["feat"]
+            elif "bn_feat" in outputs:
+                feat_norm = outputs["bn_feat"]
+                feat_norm = F.normalize(feat_norm, p=2, dim=1)
+            else:
+                raise RuntimeError("Model evaluation output dict missing 'feat'/'bn_feat' keys.")
+        elif isinstance(outputs, (list, tuple)):
+            feat_norm = outputs[0]
+        else:
+            feat_norm = outputs
+        feat_norm = F.normalize(feat_norm, p=2, dim=1)
         
         q_feats.append(feat_norm.cpu())
         q_pids.append(pids.cpu())
@@ -150,9 +161,20 @@ def test_reid(cfg, model, query_loader, gallery_loader, device):
         videos = batch['video'].to(device)
         pids = batch['pid'].to(device)
         
-        features = _extract_features(videos)
-        bn_feat = model.reid_head.bottleneck(features)
-        feat_norm = F.normalize(bn_feat, p=2, dim=1)
+        outputs = model(videos)
+        if isinstance(outputs, dict):
+            if "feat" in outputs:
+                feat_norm = outputs["feat"]
+            elif "bn_feat" in outputs:
+                feat_norm = outputs["bn_feat"]
+                feat_norm = F.normalize(feat_norm, p=2, dim=1)
+            else:
+                raise RuntimeError("Model evaluation output dict missing 'feat'/'bn_feat' keys.")
+        elif isinstance(outputs, (list, tuple)):
+            feat_norm = outputs[0]
+        else:
+            feat_norm = outputs
+        feat_norm = F.normalize(feat_norm, p=2, dim=1)
         
         g_feats.append(feat_norm.cpu())
         g_pids.append(pids.cpu())
