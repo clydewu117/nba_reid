@@ -36,7 +36,6 @@ class BasketballVideoDataset(Dataset):
         train_identities=80,
         shot_classification=False,
         control_20=False,
-        num_split=None,
     ):
         self.root = root
         self.video_type = video_type
@@ -53,12 +52,14 @@ class BasketballVideoDataset(Dataset):
         self.train_identities = train_identities
         self.shot_classification = shot_classification
         self.control_20 = control_20
-        self.num_split = num_split
         self.seed = seed
 
         # 设置随机种子
         random.seed(seed)
         np.random.seed(seed)
+
+        # 创建专用的Random实例用于数据划分，确保可复现性
+        self.rng = random.Random(seed)
 
         # 加载数据
         self.data, self.pid_list = self._load_data()
@@ -222,29 +223,26 @@ class BasketballVideoDataset(Dataset):
             ]
         )
 
-        # Num-split: 选择固定的40/80/120个球员子集（嵌套包含）
-        if self.num_split is not None:
-            if self.num_split not in [40, 80, 120]:
-                raise ValueError(
-                    f"num_split must be one of [40, 80, 120], got {self.num_split}"
-                )
-
-            # 使用seed保证可复现，对所有球员进行固定排序
-            identity_folders_copy = identity_folders.copy()
-            random.shuffle(identity_folders_copy)
-
-            # 取前num_split个球员（保证40⊂80⊂120）
-            identity_folders = identity_folders_copy[: self.num_split]
-
         # Identity-level split: 将identities划分为训练集和测试集
         if self.identity_split:
-            # 使用seed保证可复现
-            identity_folders_copy = identity_folders.copy()
-            random.shuffle(identity_folders_copy)
+            # 参数验证：train_identities必须是40、60或80
+            if self.train_identities not in [40, 60, 80]:
+                raise ValueError(
+                    f"train_identities must be one of [40, 60, 80], got {self.train_identities}"
+                )
 
-            # 前 train_identities 个作为训练集，其余作为测试集
-            train_identity_folders = identity_folders_copy[: self.train_identities]
-            test_identity_folders = identity_folders_copy[self.train_identities :]
+            # 使用独立的Random实例保证可复现性
+            identity_folders_copy = identity_folders.copy()
+            self.rng.shuffle(identity_folders_copy)
+
+            # 固定测试集：最后40个球员
+            test_identity_folders = identity_folders_copy[-40:]
+
+            # 训练集池：前面的所有球员（最多80个）
+            train_pool = identity_folders_copy[:-40]
+
+            # 从训练集池中取前train_identities个（保证40⊂60⊂80）
+            train_identity_folders = train_pool[: self.train_identities]
 
             # 根据当前模式选择对应的identity
             if self.is_train:
@@ -385,11 +383,9 @@ class BasketballVideoDataset(Dataset):
         split_mode = "Identity-level" if self.identity_split else "Video-level"
         print(f"\n{'='*60}")
         print(f"{split} Dataset ({split_mode}): {self.video_type} + {self.shot_type}")
-        if self.num_split is not None:
-            print(f"Num-split: Using {self.num_split} identities (nested: 40⊂80⊂120)")
         if self.identity_split:
             print(
-                f"Split Mode: {self.train_identities} train IDs / {120 - self.train_identities} test IDs"
+                f"Split Mode: {self.train_identities} train IDs / 40 test IDs (nested: 40⊂60⊂80)"
             )
         if self.shot_classification:
             print(
@@ -804,9 +800,6 @@ def build_dataloader(cfg, is_train=True):
     # 从config中获取control_20参数，默认为False
     control_20 = getattr(cfg.DATA, "CONTROL_20", False)
 
-    # 从config中获取num_split参数，默认为None
-    num_split = getattr(cfg.DATA, "NUM_SPLIT", None)
-
     dataset = BasketballVideoDataset(
         root=cfg.DATA.ROOT,
         video_type=cfg.DATA.VIDEO_TYPE,
@@ -824,7 +817,6 @@ def build_dataloader(cfg, is_train=True):
         train_identities=train_identities,
         shot_classification=shot_classification,
         control_20=control_20,
-        num_split=num_split,
     )
 
     # 训练时使用RandomIdentitySampler (但分类模式不使用)
