@@ -7,14 +7,15 @@ DATA:
   ROOT: /fs/scratch/PAS3184/v3
   SHOT_TYPE: freethrow
   TRAIN_RATIO: 0.7
-  VIDEO_TYPE: mask
+  VIDEO_TYPE: appearance
   WIDTH: 224
   USE_SAMPLER: true
   NUM_INSTANCES: 4
   SAMPLE_START: beginning
   SPLIT_SAMPLING: false
   USE_PRESPLIT: false
-  NUM_SPLIT: 120
+  IDENTITY_SPLIT: true
+  TRAIN_IDENTITIES: 60
 GPU_IDS:
 - 0
 LOSS:
@@ -34,7 +35,7 @@ MODEL:
   NUM_CLASSES: 0
   USE_CHECKPOINT: true
 NUM_GPUS: 1
-OUTPUT_DIR: ./outputs/rebuttal/VideoMAEv2_mask_120split
+OUTPUT_DIR: ./outputs/rebuttal/VideoMAEv2_app_60split
 REID:
   EMBED_DIM: 512
   NECK_FEAT: after
