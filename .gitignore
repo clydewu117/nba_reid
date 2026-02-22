@@ -5,6 +5,10 @@ slurm_output/
 test_output/
 test_results/
 test_run/
+test_eccv/
+test_eccv2/
+test_eccv3/
+test_rebuttal/
 
 scripts/
 train_test.sh
