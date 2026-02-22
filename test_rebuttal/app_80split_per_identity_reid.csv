@@ -1,0 +1,41 @@
+identity,query_samples,gallery_samples,mAP,rank1,rank5,rank10
+Aaron Gordon,21,22,1.0,1.0,1.0,1.0
+Alperen Sengun,19,19,1.0,1.0,1.0,1.0
+Andrew Wiggins,21,22,1.0,1.0,1.0,1.0
+Bogdan Bogdanović,18,18,1.0,1.0,1.0,1.0
+Brandon Miller,16,17,1.0,1.0,1.0,1.0
+Brook Lopez,18,18,1.0,1.0,1.0,1.0
+Cade Cunningham,17,18,1.0,1.0,1.0,1.0
+Chris Paul,17,18,1.0,1.0,1.0,1.0
+Darius Garland,21,22,1.0,1.0,1.0,1.0
+DeMar DeRozan,19,20,1.0,1.0,1.0,1.0
+Dejounte Murray,16,17,1.0,1.0,1.0,1.0
+Deni Avdija,20,21,1.0,1.0,1.0,1.0
+Derrick Jones Jr.,18,19,1.0,1.0,1.0,1.0
+Dillon Brooks,17,17,1.0,1.0,1.0,1.0
+Gary Trent Jr.,18,19,1.0,1.0,1.0,1.0
+James Harden,22,22,1.0,1.0,1.0,1.0
+Jaren Jackson Jr.,18,19,1.0,1.0,1.0,1.0
+Jimmy Butler,17,18,1.0,1.0,1.0,1.0
+Jrue Holiday,18,18,1.0,1.0,1.0,1.0
+Kelly Oubre Jr,19,19,1.0,1.0,1.0,1.0
+Kevin Durant,18,19,1.0,1.0,1.0,1.0
+Kristaps Porziņģis,18,19,1.0,1.0,1.0,1.0
+Kyle Kuzma,22,22,1.0,1.0,1.0,1.0
+Lebron James,19,19,1.0,1.0,1.0,1.0
+Luke Kennard,18,19,1.0,1.0,1.0,1.0
+Malik Monk,20,20,1.0,1.0,1.0,1.0
+Marcus Smart,17,18,1.0,1.0,1.0,1.0
+Mikal Bridges,18,18,1.0,1.0,1.0,1.0
+Miles Bridges,24,25,1.0,1.0,1.0,1.0
+Nikola Jokić,19,20,1.0,1.0,1.0,1.0
+Quentin Grimes,23,23,1.0,1.0,1.0,1.0
+Rui Hachimura,15,15,1.0,1.0,1.0,1.0
+Russell Westbrook,18,18,1.0,1.0,1.0,1.0
+Scottie Barnes,19,20,1.0,1.0,1.0,1.0
+Shai Gilgeous-Alexander,19,19,1.0,1.0,1.0,1.0
+Trae Young,18,18,1.0,1.0,1.0,1.0
+Ty Jerome,18,19,1.0,1.0,1.0,1.0
+Tyrese Haliburton,17,18,1.0,1.0,1.0,1.0
+Tyrese Maxey,20,21,1.0,1.0,1.0,1.0
+Victor Wembanyama,21,21,1.0,1.0,1.0,1.0

@@ -58,9 +58,6 @@ class BasketballVideoDataset(Dataset):
         random.seed(seed)
         np.random.seed(seed)
 
-        # 创建专用的Random实例用于数据划分，确保可复现性
-        self.rng = random.Random(seed)
-
         # 加载数据
         self.data, self.pid_list = self._load_data()
 
@@ -231,18 +228,18 @@ class BasketballVideoDataset(Dataset):
                     f"train_identities must be one of [40, 60, 80], got {self.train_identities}"
                 )
 
-            # 使用独立的Random实例保证可复现性
+            # 使用全局random保证与原版shuffle结果一致
             identity_folders_copy = identity_folders.copy()
-            self.rng.shuffle(identity_folders_copy)
+            random.shuffle(identity_folders_copy)
 
-            # 固定测试集：最后40个球员
+            # 固定测试集：最后40个球员（与原版 train_identities=80 时一致）
             test_identity_folders = identity_folders_copy[-40:]
 
             # 训练集池：前面的所有球员（最多80个）
             train_pool = identity_folders_copy[:-40]
 
             # 从训练集池中取前train_identities个（保证40⊂60⊂80）
-            train_identity_folders = train_pool[: self.train_identities]
+            train_identity_folders = train_pool[:self.train_identities]
 
             # 根据当前模式选择对应的identity
             if self.is_train:
@@ -395,7 +392,7 @@ class BasketballVideoDataset(Dataset):
         if self.control_20:
             print(f"  → Only keep identities where ALL shot_types have >=20 videos")
         print(f"Sample Start: {self.sample_start}")
-        print(f"Split Sampling: {self.split_sampling}")  # 新增：显示分段采样状态
+        print(f"Split Sampling: {self.split_sampling}")
         if self.split_sampling:
             print(f"  → First 50%: 4 frames, Last 50%: 12 frames")
         print(f"{'='*60}")
