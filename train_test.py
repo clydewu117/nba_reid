@@ -382,7 +382,7 @@ def train(cfg):
     # 初始化wandb
     run_name = f"{cfg.OUTPUT_DIR.split('/')[-1]}"
     wandb.init(
-        project="nba-reid", 
+        project="nba-eccv", 
         name=run_name,
         config={
             "num_classes": num_classes, 

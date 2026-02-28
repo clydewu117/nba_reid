@@ -21,7 +21,7 @@ _C.DATA.WIDTH = 224
 _C.DATA.BATCH_SIZE = 64                 # 使用sampler时建议64
 _C.DATA.NUM_WORKERS = 4
 _C.DATA.TRAIN_RATIO = 0.7               # 训练集比例 70%
-_C.DATA.SAMPLE_START = "middle"
+_C.DATA.SAMPLE_START = "beginning"      # 'beginning' or 'middle'
 _C.DATA.SPLIT_SAMPLING = False
 _C.DATA.USE_PRESPLIT = False
 # Sampler配置（用于Triplet Loss训练）
@@ -37,6 +37,7 @@ _C.DATA.CONTROL_20 = (
     False                               # 是否控制每个identity每个shot_type最多20个视频样本（用于消除数据量差异影响）
 )
 _C.DATA.NUM_SPLIT = None                # 使用固定的N个球员子集进行训练，可选值: 40, 80, 120, None (None表示使用全部球员)
+_C.DATA.TEMPORAL_SHUFFLE_RATIO = 0.0    # 采样后，有多少比例的帧会被打乱顺序，0=不打乱，1=完全打乱
 
 # -----------------------------------------------------------------------------
 # Model
