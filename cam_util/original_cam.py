@@ -52,6 +52,12 @@ class OriginalCAM:
         self.spatial_features = features.detach()  # No gradients needed!
         logger.info(f"[OriginalCAM] Captured spatial features: {features.shape}")
 
+    def _get_reid_head(self):
+        reid_head = getattr(self.model, "reid_head", None)
+        if reid_head is None and hasattr(self.model, "module"):
+            reid_head = getattr(self.model.module, "reid_head", None)
+        return reid_head
+
     def generate_cam(self, input_tensor, target_id=None):
         """
         Generate CAM without gradients.
@@ -64,9 +70,7 @@ class OriginalCAM:
 
         # Forward pass in eval mode (no gradients needed!)
         # Ensure ReID heads emit logits during inference for CAM computation.
-        reid_head = getattr(self.model, "reid_head", None)
-        if reid_head is None and hasattr(self.model, "module"):
-            reid_head = getattr(self.model.module, "reid_head", None)
+        reid_head = self._get_reid_head()
         toggled_classification = False
 
         if (
@@ -113,11 +117,12 @@ class OriginalCAM:
 
         logger.info(f"[OriginalCAM] Spatial features shape: {self.spatial_features.shape}")
 
-        if not hasattr(self.model, 'reid_head') or not hasattr(self.model.reid_head, 'classifier'):
+        reid_head = self._get_reid_head()
+        if reid_head is None or not hasattr(reid_head, 'classifier'):
             logger.error("[OriginalCAM] Cannot find reid_head.classifier!")
             return None
 
-        classifier = self.model.reid_head.classifier
+        classifier = reid_head.classifier
         num_classes = classifier.weight.shape[0]
 
         # Align logits with classifier dimension when model returns embeddings

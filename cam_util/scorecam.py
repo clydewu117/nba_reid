@@ -38,6 +38,64 @@ class ScoreCAM:
         self.activations = activation_tensor.detach()  # No gradients needed for ScoreCAM
         logger.info(f"[ScoreCAM] Captured activation: {activation_tensor.shape}")
 
+    def _get_reid_head(self):
+        reid_head = getattr(self.model, "reid_head", None)
+        if reid_head is None and hasattr(self.model, "module"):
+            reid_head = getattr(self.model.module, "reid_head", None)
+        return reid_head
+
+    def _forward_for_cam(self, input_tensor):
+        """Run forward while forcing classification logits when available."""
+        reid_head = self._get_reid_head()
+        toggled = False
+        original_mode = None
+        if (
+            reid_head is not None
+            and hasattr(reid_head, "is_classification")
+            and not reid_head.is_classification
+        ):
+            toggled = True
+            original_mode = reid_head.is_classification
+            reid_head.is_classification = True
+
+        try:
+            return self.model(input_tensor)
+        finally:
+            if toggled and original_mode is not None:
+                reid_head.is_classification = original_mode
+
+    def _extract_logits(self, output):
+        """Extract classification logits from dict/tuple/tensor outputs."""
+        logits = None
+
+        if isinstance(output, dict):
+            logits = output.get("cls_score", None)
+        elif isinstance(output, tuple) and len(output) >= 1:
+            logits = output[0]
+        elif torch.is_tensor(output):
+            logits = output
+
+        if logits is None or logits.dim() != 2:
+            return None
+
+        classifier = getattr(self._get_reid_head(), "classifier", None)
+        if classifier is not None:
+            num_classes = classifier.weight.shape[0]
+            in_dim = classifier.weight.shape[1]
+            if logits.shape[1] != num_classes:
+                if logits.shape[1] == in_dim:
+                    logger.info("[ScoreCAM] Converting embedding output to logits via classifier weights.")
+                    logits = torch.matmul(logits, classifier.weight.t())
+                    if classifier.bias is not None:
+                        logits = logits + classifier.bias.unsqueeze(0)
+                else:
+                    logger.warning(
+                        "[ScoreCAM] Output dim %d incompatible with classifier (num_classes=%d, in_dim=%d).",
+                        logits.shape[1], num_classes, in_dim
+                    )
+                    return None
+        return logits
+
     def generate_cam(self, input_tensor, target_id=None, batch_size=32):
         """
         Generate ScoreCAM for input.
@@ -52,16 +110,11 @@ class ScoreCAM:
 
         # Initial forward pass to get activations and predictions (NO GRADIENTS)
         with torch.no_grad():
-            output = self.model(input_tensor)
+            output = self._forward_for_cam(input_tensor)
 
-        # Handle dict or tensor output
-        logits = None
-        if isinstance(output, dict):
-            if 'cls_score' in output:
-                logits = output['cls_score']  # [B, num_classes]
-                logger.info(f"[ScoreCAM] Model output (cls_score) shape: {logits.shape}")
-            else:
-                logger.warning("[ScoreCAM] No 'cls_score' in model output; falling back to global_feat.")
+        logits = self._extract_logits(output)
+        if logits is not None:
+            logger.info(f"[ScoreCAM] Model logits shape: {logits.shape}")
 
         if self.activations is None:
             logger.error("[ScoreCAM] No activations captured during forward pass!")
@@ -245,9 +298,9 @@ class ScoreCAM:
 
                 # Forward pass with masked input
                 with torch.no_grad():
-                    masked_output = self.model(masked_input)
-                    if isinstance(masked_output, dict) and 'cls_score' in masked_output:
-                        masked_logits = masked_output['cls_score']
+                    masked_output = self._forward_for_cam(masked_input)
+                    masked_logits = self._extract_logits(masked_output)
+                    if masked_logits is not None:
                         # Get score for target class
                         if self.finer:
                             # Finer mode: use target class confidence minus second-highest class confidence
@@ -264,7 +317,7 @@ class ScoreCAM:
                         else:
                             score = float(masked_logits[0, chosen].cpu().item())
                     else:
-                        logger.warning(f"[ScoreCAM] Channel {c}: No cls_score in output")
+                        logger.warning(f"[ScoreCAM] Channel {c}: cannot extract classification logits")
                         score = 0.0
 
                 batch_weights.append(score)

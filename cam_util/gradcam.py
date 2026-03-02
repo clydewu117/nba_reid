@@ -65,6 +65,71 @@ class SimpleGradCAM:
             activation_tensor.register_hook(save_grad)
             logger.info(f"Registered tensor hook on activation: {activation_tensor.shape}")
 
+    def _get_reid_head(self):
+        reid_head = getattr(self.model, "reid_head", None)
+        if reid_head is None and hasattr(self.model, "module"):
+            reid_head = getattr(self.model.module, "reid_head", None)
+        return reid_head
+
+    def _forward_for_cam(self, input_tensor):
+        """Run forward while forcing classification logits when available."""
+        reid_head = self._get_reid_head()
+        toggled = False
+        original_mode = None
+        if (
+            reid_head is not None
+            and hasattr(reid_head, "is_classification")
+            and not reid_head.is_classification
+        ):
+            toggled = True
+            original_mode = reid_head.is_classification
+            reid_head.is_classification = True
+
+        try:
+            return self.model(input_tensor)
+        finally:
+            if toggled and original_mode is not None:
+                reid_head.is_classification = original_mode
+
+    def _extract_logits(self, output):
+        """Extract classification logits from dict/tuple/tensor outputs."""
+        logits = None
+
+        if isinstance(output, dict):
+            logits = output.get("cls_score", None)
+            if logits is None and "global_feat" in output:
+                logger.warning("No 'cls_score' in model output; got 'global_feat' instead.")
+        elif isinstance(output, tuple) and len(output) >= 1:
+            logits = output[0]
+        elif torch.is_tensor(output):
+            logits = output
+
+        if logits is None:
+            return None
+
+        if logits.dim() != 2:
+            logger.warning(f"Unexpected logits shape {tuple(logits.shape)}; expected [B, C].")
+            return None
+
+        classifier = getattr(self._get_reid_head(), "classifier", None)
+        if classifier is not None:
+            num_classes = classifier.weight.shape[0]
+            in_dim = classifier.weight.shape[1]
+            if logits.shape[1] != num_classes:
+                if logits.shape[1] == in_dim:
+                    logger.info("Converting embedding output to logits via classifier weights.")
+                    logits = torch.matmul(logits, classifier.weight.t())
+                    if classifier.bias is not None:
+                        logits = logits + classifier.bias.unsqueeze(0)
+                else:
+                    logger.warning(
+                        "Output dim %d incompatible with classifier (num_classes=%d, in_dim=%d).",
+                        logits.shape[1], num_classes, in_dim
+                    )
+                    return None
+
+        return logits
+
     def generate_cam(self, input_tensor, target_id=None):
         """Generate CAM for input."""
         self.model.zero_grad()
@@ -72,23 +137,11 @@ class SimpleGradCAM:
         self.gradients = None
 
         # Forward pass (model now returns cls_score in both train/eval modes)
-        output = self.model(input_tensor)
+        output = self._forward_for_cam(input_tensor)
 
-        # Handle dict or tensor output
-        logits = None
-        features = None
-        if isinstance(output, dict):
-            if 'cls_score' in output:
-                logits = output['cls_score']  # [B, num_classes]
-                logger.info(f"Model output (cls_score) shape: {logits.shape}, requires_grad: {logits.requires_grad}")
-            else:
-                logger.warning("No 'cls_score' in model output; falling back to global_feat.")
-            if logits is None and 'global_feat' in output:
-                features = output['global_feat']  # [B, D]
-                logger.info(f"Model output (global_feat) shape: {features.shape}, requires_grad: {features.requires_grad}")
-        else:
-            features = output
-            logger.info(f"Model output shape: {features.shape}, requires_grad: {features.requires_grad}")
+        logits = self._extract_logits(output)
+        if logits is not None:
+            logger.info(f"Model logits shape: {logits.shape}, requires_grad: {logits.requires_grad}")
 
         if self.activations is None:
             logger.error("No activations captured during forward pass!")
@@ -205,9 +258,8 @@ class SimpleGradCAM:
                     score = logits[0, chosen]
                     logger.info(f"Using class {chosen} for CAM (probability: {float(probs[chosen])*100:.2f}%, logit: {float(score):.3f})")
         else:
-            # Fallback on a feature element
-            score = features[0, 0] if features.dim() == 2 else features[0].view(-1)[0]
-            logger.info("⚠ WARNING: No cls_score available, using feature channel as fallback")
+            logger.error("Cannot compute GradCAM without classification logits.")
+            return None
         logger.info(f"Gradient target score: {float(score.item()):.6f}, requires_grad: {score.requires_grad}")
 
         # Compute gradients manually

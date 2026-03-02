@@ -58,6 +58,7 @@ def load_config(config_path, num_classes=None):
     cfg.DATA.SAMPLE_START = data_cfg.get("SAMPLE_START", "beginning")
     cfg.DATA.SPLIT_SAMPLING = data_cfg.get("SPLIT_SAMPLING", False)
     cfg.DATA.USE_PRESPLIT = data_cfg.get("USE_PRESPLIT", False)
+    cfg.DATA.SHOT_CLASSIFICATION = data_cfg.get("SHOT_CLASSIFICATION", False)
 
     # Model config
     cfg.MODEL = CN()
@@ -464,8 +465,6 @@ def main():
     elif args.method == "gradcam++":
         cam_generator = GradCAMPlusPlus(model, target_layer)
         logger.info("Using GradCAM++ method (second-order gradients)")
-        cam_generator = SimpleGradCAM(model, target_layer, finer=args.finer, bn_folding=args.bn_folding)
-        logger.info(f"Using GradCAM method{' with FINER mode' if args.finer else ''}{' with BN Folding' if args.bn_folding else ''}")
     else:
         cam_generator = SimpleGradCAM(model, target_layer, finer=args.finer, bn_folding=args.bn_folding)
         logger.info(f"Using GradCAM method{' with FINER mode' if args.finer else ''}{' with BN Folding' if args.bn_folding else ''}")

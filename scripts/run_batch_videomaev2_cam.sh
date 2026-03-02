@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --account=
 #SBATCH --job-name=VideoMAEv2_cam
-#SBATCH --time=20:00:00
+#SBATCH --time=10:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-node=1
-#SBATCH --cpus-per-task=2
+#SBATCH --cpus-per-task=1
 #SBATCH --mem=32G
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=
@@ -14,10 +14,10 @@
 set -x
 
 CSV_PATH=/fs/scratch/PAS3184/v3/shot_train_test_split_ctrl20.csv
-CONFIG_PATH=/users/PAS2985/cz2128/ReID/nba_reid/outputs/sup/VideoMAEv2_appearance_motionclassify_ctrl20/config.yaml
+CONFIG_PATH=/users/PAS2985/cz2128/ReID/nba_reid/outputs/cvpr_sup/VideoMAEv2_appearance_motionclassify_ctrl20/config.yaml
 OUTPUT_ROOT=/fs/scratch/PAS3184/v3_cam
 MODEL_NAME=VideoMAEv2
-CHECKPOINTS="/users/PAS2985/cz2128/ReID/nba_reid/outputs/sup/VideoMAEv2_appearance_motionclassify_ctrl20/VideoMAEv2_appearance_motionclassify_ctrl20.pth"
+CHECKPOINTS="/users/PAS2985/cz2128/ReID/nba_reid/outputs/cvpr_sup/VideoMAEv2_appearance_motionclassify_ctrl20/VideoMAEv2_appearance_motionclassify_ctrl20.pth"
 
 cd /users/PAS2985/cz2128/ReID/nba_reid-cam
 python batch_videomaev2_cam.py \
@@ -27,5 +27,5 @@ python batch_videomaev2_cam.py \
   --model-name "$MODEL_NAME" \
   --sampling uniform \
   --modality appearance \
-  --methods originalcam \
+  --methods originalcam gradcam \
   --checkpoints "$CHECKPOINTS"

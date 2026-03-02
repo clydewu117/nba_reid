@@ -51,6 +51,7 @@ def load_config(config_path, num_classes=None):
     cfg.DATA.TRAIN_RATIO = yaml_cfg.get('DATA', {}).get('TRAIN_RATIO', 0.7)
     cfg.DATA.USE_SAMPLER = yaml_cfg.get('DATA', {}).get('USE_SAMPLER', True)
     cfg.DATA.VIDEO_TYPE = yaml_cfg.get('DATA', {}).get('VIDEO_TYPE', '')
+    cfg.DATA.SHOT_CLASSIFICATION = yaml_cfg.get('DATA', {}).get('SHOT_CLASSIFICATION', False)
 
     # Model config
     cfg.MODEL = CN()
