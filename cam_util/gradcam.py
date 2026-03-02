@@ -285,18 +285,11 @@ class SimpleGradCAM:
             # UniFormerV2 format: [L, NT, C]
             L, NT, C = self.activations.shape
             logger.info(f"Detected UniFormerV2 format [L={L}, NT={NT}, C={C}]")
-            
-            # Infer batch size from input (input_tensor was used in forward pass)
-            # Assuming input_tensor has shape [B, C, T, H, W]
-            # We need to infer N and T from NT
-            # Heuristic: if NT is small (like 16), it's likely N*T with N=2 (batched)
-            if NT <= 32:
-                N = 2  # Assume batched input
-                T = NT // N
-            else:
-                N = 1
-                T = NT
-            logger.info(f"Inferred N={N}, T={T} from NT={NT}")
+
+            # Infer batch size directly from input tensor shape [B, C, T, H, W]
+            N = input_tensor.shape[0]
+            T = NT // N
+            logger.info(f"Inferred N={N}, T={T} from input_tensor.shape[0] and NT={NT}")
             
             # Remove CLS token and reshape to include time dimension
             activations_no_cls = self.activations[1:, :, :]  # [HW, NT, C]

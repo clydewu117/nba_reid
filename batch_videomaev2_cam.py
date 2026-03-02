@@ -385,9 +385,8 @@ def process_video_entry(
                 failure += 1
                 continue
 
-            cam_3d = reshape_cam_3d(cam_flat, expect_T=8, expect_H=14, expect_W=14)
-
             try:
+                cam_3d = reshape_cam_3d(cam_flat, expect_T=8, expect_H=14, expect_W=14)
                 save_frames_as_png(frames_dir, cam_dir, selected_frames, cam_3d)
                 if not args.skip_video:
                     write_video_from_png(

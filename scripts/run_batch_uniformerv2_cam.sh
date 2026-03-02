@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --account=
 #SBATCH --job-name=UniFormerV2_cam
-#SBATCH --time=20:00:00
+#SBATCH --time=10:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-node=1
-#SBATCH --cpus-per-task=2
+#SBATCH --cpus-per-task=1
 #SBATCH --mem=32G
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=
@@ -27,5 +27,5 @@ python batch_uniformerv2_cam.py \
   --model-name "$MODEL_NAME" \
   --sampling uniform \
   --modality appearance \
-  --methods originalcam \
+  --methods originalcam gradcam \
   --checkpoints "$CHECKPOINTS"
