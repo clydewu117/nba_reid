@@ -386,7 +386,7 @@ def process_video_entry(
                 continue
 
             try:
-                cam_3d = reshape_cam_3d(cam_flat, expect_T=8, expect_H=14, expect_W=14)
+                cam_3d = reshape_cam_3d(cam_flat, expect_T=args.cam_expect_T, expect_H=14, expect_W=14)
                 save_frames_as_png(frames_dir, cam_dir, selected_frames, cam_3d)
                 if not args.skip_video:
                     write_video_from_png(
@@ -477,6 +477,10 @@ def main() -> None:
     height = cfg.DATA.HEIGHT
     width = cfg.DATA.WIDTH
     transform = build_eval_transform(height, width)
+
+    tubelet_size = int(getattr(cfg.VIDEOMAEV2, "TUBELET_SIZE", 2))
+    args.cam_expect_T = args.frames // tubelet_size
+    logger.info(f"CAM temporal tokens: {args.cam_expect_T} (frames={args.frames}, tubelet_size={tubelet_size})")
 
     logger.info(f"Loaded {len(entries)} test entries from {args.csv}")
 

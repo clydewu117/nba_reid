@@ -244,8 +244,8 @@ def process_video(video_path, T=16, out_size=224):
 
     # Normalize to tensor [1, C, T, H, W] using 224x224 frames
     frames_np = (np.stack(frames_224).astype(np.float32) / 255.0)
-    mean = np.array([0.45, 0.45, 0.45]).reshape(1, 1, 1, 3)
-    std = np.array([0.225, 0.225, 0.225]).reshape(1, 1, 1, 3)
+    mean = np.array([0.485, 0.456, 0.406]).reshape(1, 1, 1, 3)
+    std = np.array([0.229, 0.224, 0.225]).reshape(1, 1, 1, 3)
     frames_np = (frames_np - mean) / std
     tensor = torch.from_numpy(frames_np).float().permute(3, 0, 1, 2).unsqueeze(0)
 
