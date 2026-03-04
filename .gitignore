@@ -9,6 +9,7 @@ test_eccv/
 test_eccv2/
 test_eccv3/
 test_rebuttal/
+test_edge/
 
 scripts/
 train_test.sh

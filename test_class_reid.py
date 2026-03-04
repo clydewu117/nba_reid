@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
-Basketball Video ReID - Classification Performance Testing Script
-测试模型checkpoint的分类表现
+Basketball Video ReID - Classification & ReID Performance Testing Script
+测试模型checkpoint的分类和ReID表现
 """
 
 import os
@@ -341,6 +341,7 @@ def test_classification(cfg, model, test_loader, device, class_names=None, debug
     
     # 初始化指标
     top1_acc = AverageMeter()
+    top3_acc = AverageMeter()
     top5_acc = AverageMeter()
     losses = AverageMeter()
     
@@ -397,6 +398,14 @@ def test_classification(cfg, model, test_loader, device, class_names=None, debug
             top1_correct = correct[:1].reshape(-1).float().sum(0)
             top1_acc.update(top1_correct.item() * 100.0 / labels.size(0), labels.size(0))
             
+            # Top-3 准确率
+            k3 = min(3, logits.size(1))
+            _, pred_top3 = logits.topk(k3, 1, True, True)
+            pred_top3 = pred_top3.t()
+            correct_top3 = pred_top3.eq(labels.view(1, -1).expand_as(pred_top3))
+            top3_correct = correct_top3[:k3].reshape(-1).float().sum(0)
+            top3_acc.update(top3_correct.item() * 100.0 / labels.size(0), labels.size(0))
+
             # Top-5 准确率
             k = min(5, logits.size(1))
             _, pred_top5 = logits.topk(k, 1, True, True)
@@ -469,6 +478,7 @@ def test_classification(cfg, model, test_loader, device, class_names=None, debug
     print(f"{'='*80}")
     print(f"  Loss        : {losses.avg:.4f}")
     print(f"  Top-1 Acc   : {top1_acc.avg:.2f}%")
+    print(f"  Top-3 Acc   : {top3_acc.avg:.2f}%")
     print(f"  Top-5 Acc   : {top5_acc.avg:.2f}%")
     print(f"  Accuracy    : {accuracy*100:.2f}%")
     print(f"  Precision   : {precision*100:.2f}%")
@@ -495,6 +505,7 @@ def test_classification(cfg, model, test_loader, device, class_names=None, debug
     results = {
         'loss': losses.avg,
         'top1_accuracy': top1_acc.avg,
+        'top3_accuracy': top3_acc.avg,
         'top5_accuracy': top5_acc.avg,
         'accuracy': accuracy * 100,
         'precision': precision * 100,
@@ -822,11 +833,11 @@ def main():
     reid_results = compute_reid_metrics(cfg, model, test_loader.dataset, device, rank_ks)
     
     # 保存结果到JSON
-    results_file = os.path.join(args.output_dir, "classification_results.json")
+    results_file = os.path.join(args.output_dir, "test_results.json")
     with open(results_file, 'w') as f:
-        # 只保存关键指标，移除混淆矩阵、预测结果等大数组
-        results_to_save = {k: v for k, v in results.items() 
-                          if k not in ['predictions', 'labels', 'probabilities', 'confusion_matrix']}
+        # 只保存关键指标，移除混淆矩阵、预测结果、per_class_metrics 等大数组
+        results_to_save = {k: v for k, v in results.items()
+                          if k not in ['predictions', 'labels', 'probabilities', 'confusion_matrix', 'per_class_metrics']}
         reid_save = {
             'available': reid_results.get('available', True),
             'num_query': reid_results.get('num_query', 0),
@@ -847,6 +858,7 @@ def main():
     print(f"  [Classification]")
     print(f"    Loss     : {results['loss']:.4f}")
     print(f"    Top-1    : {results['top1_accuracy']:.2f}%")
+    print(f"    Top-3    : {results['top3_accuracy']:.2f}%")
     print(f"    Top-5    : {results['top5_accuracy']:.2f}%")
     print(f"    Acc      : {results['accuracy']:.2f}%")
     print(f"    Precision: {results['precision']:.2f}%  Recall: {results['recall']:.2f}%  F1: {results['f1_score']:.2f}%")
