@@ -19,7 +19,7 @@ OUTPUT_ROOT=/fs/scratch/PAS3184/v3_cam
 MODEL_NAME=MViTv2
 CHECKPOINTS="/fs/scratch/PAS3184/eccv_mvitv2_cam/appearance_drop02_ctrl20_good/appearance_drop02_ctrl20_good.pth"
 
-cd /users/PAS2985/cz2128/ReID/nba_reid-cam
+cd /users/PAS2099/clydewu117/nba_reid-cam
 python batch_mvitv2_cam.py \
   --csv "$CSV_PATH" \
   --config "$CONFIG_PATH" \
