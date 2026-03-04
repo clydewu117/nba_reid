@@ -180,10 +180,14 @@ class MViTReID(nn.Module):
 			neck_feat=self.neck_feat,
 			is_classification=is_classification,
 		)
+		# For GradCAM: "choose_class"=CLS (correct logits for argmax), "gradient"=patch mean (grad flow)
+		self._cam_pooling = None
 
-	@torch.no_grad()
 	def _forward_features_eval(self, x):
-		"""Feature extraction path (eval) mirroring SlowFast MViT forward up to pre-head."""
+		"""Feature extraction path (eval) mirroring SlowFast MViT forward up to pre-head.
+		Note: No @torch.no_grad() - GradCAM/LayerCAM/GradCAM++ require gradients. Caller should
+		use torch.no_grad() during normal inference if memory optimization is needed.
+		"""
 		m = self.backbone
 		x, bcthw = m.patch_embed(x)
 		bcthw = list(bcthw)
@@ -228,7 +232,14 @@ class MViTReID(nn.Module):
 			x = m.norm(x)
 		elif m.cls_embed_on:
 			x = m.norm(x)
-			x = x[:, 0]
+			# GradCAM two-phase: "choose_class" uses CLS (correct BN/logits); "gradient" uses patch mean
+			cam_phase = getattr(self, "_cam_pooling", None)
+			if cam_phase == "gradient":
+				x = x[:, 1:].mean(1)  # patch mean for gradient flow
+			elif cam_phase == "choose_class" or cam_phase is None:
+				x = x[:, 0]  # CLS for correct class selection / normal inference
+			else:
+				x = x[:, 0]
 		else:
 			x = m.norm(x)
 			x = x.mean(1)
@@ -281,7 +292,12 @@ class MViTReID(nn.Module):
 			x = m.norm(x)
 		elif m.cls_embed_on:
 			x = m.norm(x)
-			x = x[:, 0]
+			# --train-mode GradCAM: same two-phase as eval
+			cam_phase = getattr(self, "_cam_pooling", None)
+			if cam_phase == "gradient":
+				x = x[:, 1:].mean(1)  # patch mean for gradient flow
+			else:
+				x = x[:, 0]  # CLS for training / choose_class
 		else:
 			x = m.norm(x)
 			x = x.mean(1)

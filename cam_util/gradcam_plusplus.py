@@ -120,8 +120,29 @@ class GradCAMPlusPlus:
         self.activations = None
         self.gradients = None
 
-        # Forward pass (model now returns cls_score in both train/eval modes)
-        output = self._forward_for_cam(input_tensor)
+        # MViTv2: patch mean for gradients; two-phase when choosing class
+        has_cam_pooling = hasattr(self.model, "_cam_pooling")
+        chosen = None
+        if has_cam_pooling and (target_id is None or target_id < 0):
+            # Phase 1: CLS path for correct chosen (avoids BN/patch-mean distribution mismatch)
+            self.model._cam_pooling = "choose_class"
+            try:
+                with torch.no_grad():
+                    output_cls = self._forward_for_cam(input_tensor)
+                logits_cls = self._extract_logits(output_cls)
+                if logits_cls is not None:
+                    chosen = int(torch.argmax(logits_cls[0]).item())
+                    logger.info(f"[GradCAM++] MViT two-phase: chosen class {chosen} from CLS path")
+            finally:
+                self.model._cam_pooling = None
+        # Phase 2: patch mean path for gradient flow (activations captured here)
+        if has_cam_pooling:
+            self.model._cam_pooling = "gradient"
+        try:
+            output = self._forward_for_cam(input_tensor)
+        finally:
+            if has_cam_pooling:
+                self.model._cam_pooling = None
 
         logits = self._extract_logits(output)
         if logits is not None:
@@ -135,18 +156,17 @@ class GradCAMPlusPlus:
 
         # Select scalar score for backprop
         if logits is not None:
-            # Compute probabilities and show top-5 predictions
             probs = F.softmax(logits[0], dim=0)
             top5_probs, top5_ids = torch.topk(probs, min(5, logits.shape[1]))
-
             logger.info("="*70)
             logger.info("[GradCAM++] Top-5 Predicted Classes:")
             for i, (pred_id, prob) in enumerate(zip(top5_ids, top5_probs)):
                 logit_val = float(logits[0, pred_id])
                 logger.info(f"  Rank {i+1}: Class {int(pred_id):3d} | Probability: {float(prob)*100:6.2f}% | Logit: {logit_val:+.3f}")
             logger.info("="*70)
-
-            if target_id is None or target_id < 0 or target_id >= logits.shape[1]:
+            if chosen is not None:
+                pass
+            elif target_id is None or target_id < 0 or target_id >= logits.shape[1]:
                 chosen = int(torch.argmax(logits[0]).item())
             else:
                 chosen = int(target_id)
@@ -212,10 +232,15 @@ class GradCAMPlusPlus:
             logger.info(f"[GradCAM++] After removing CLS and reshaping: activations {activations.shape}, grads {grads.shape} (T={T}, H={H}, W={W})")
             
         elif self.activations.dim() == 3:
-            # MViT format: [B, N, C]
+            # MViT format: [B, N, C] where N=tokens (1+THW when cls_embed_on)
             logger.info(f"[GradCAM++] Detected MViT format [B={self.activations.shape[0]}, N={self.activations.shape[1]}, C={self.activations.shape[2]}]")
             activations = self.activations[0:1]  # [1, N, C]
             grads = self.gradients[0:1]          # [1, N, C]
+            # Remove CLS token for MViT (first token when cls_embed_on)
+            if getattr(self.model.backbone, "cls_embed_on", False):
+                activations = activations[:, 1:, :]
+                grads = grads[:, 1:, :]
+                logger.info(f"[GradCAM++] Removed CLS token for MViT, new shape: {activations.shape}")
         else:
             raise ValueError(f"Unexpected activation shape: {self.activations.shape}")
 
@@ -266,17 +291,9 @@ class GradCAMPlusPlus:
         logger.info(f"[GradCAM++] Channel weights stats: mean={weights.mean():.4f}, std={weights.std():.4f}, min={weights.min():.4f}, max={weights.max():.4f}")
 
         # Weighted combination over channels -> [1, N]
+        # (CLS token already removed from activations for MViT above)
         cam = np.sum(weights * activations_np, axis=2)
         logger.info(f"[GradCAM++] CAM before ReLU: mean={cam.mean():.4f}, std={cam.std():.4f}, min={cam.min():.4f}, max={cam.max():.4f}")
-
-        # Remove CLS token if present
-        try:
-            if getattr(self.model.backbone, "cls_embed_on", False):
-                cam = cam[:, 1:]
-                logger.info(f"[GradCAM++] Removed CLS token, new shape: {cam.shape}")
-        except Exception:
-            # if backbone not present/attr missing, just skip
-            pass
 
         # ReLU and normalize
         cam = np.maximum(cam, 0)

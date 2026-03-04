@@ -42,7 +42,7 @@ from cam_util import (  # noqa: E402
     ScoreCAM,
     SimpleGradCAM,
 )
-from run_gradcam_mvit import load_model, reshape_cam_3d  # noqa: E402
+from run_gradcam_mvit import load_config, load_model, reshape_cam_3d  # noqa: E402
 
 logger = logging.get_logger(__name__)
 
@@ -417,7 +417,12 @@ def process_video_entry(
                 continue
 
             try:
-                cam_3d = reshape_cam_3d(cam_flat, expect_T=8, expect_H=7, expect_W=7)
+                cam_3d = reshape_cam_3d(
+                    cam_flat,
+                    expect_T=args.cam_expect_T,
+                    expect_H=args.cam_expect_H,
+                    expect_W=args.cam_expect_W,
+                )
                 save_frames_as_png(frames_dir, cam_dir, selected_frames, cam_3d)
                 if not args.skip_video:
                     write_video_from_png(
@@ -440,6 +445,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Batch MViT Grad-CAM generator")
     parser.add_argument("--csv", required=True, type=Path, help="Path to train_test_split CSV")
     parser.add_argument("--checkpoints", required=True, nargs="+", type=Path, help="Checkpoint paths")
+    parser.add_argument("--config", required=True, type=Path, help="Model config YAML (for SHOT_CLASSIFICATION, DATA, MVIT)")
     parser.add_argument("--output-root", type=Path, default=Path("./batch_cam_output"),
                         help="Base output directory")
     parser.add_argument("--model-name", type=str, default="MViTv2",
@@ -508,10 +514,16 @@ def main() -> None:
         logger.warning("No test entries matched the provided filters.")
         return
 
-    # MViT expects 224x224 frames by default
-    height = 224
-    width = 224
+    cfg = load_config(str(args.config))
+    height = cfg.DATA.HEIGHT
+    width = cfg.DATA.WIDTH
     transform = build_eval_transform(height, width)
+
+    # MViTv2 CAM shape: last block outputs 8x7x7 spatial tokens (16 frames with pooling)
+    args.cam_expect_T = 8
+    args.cam_expect_H = 7
+    args.cam_expect_W = 7
+    logger.info(f"CAM temporal/spatial tokens: T={args.cam_expect_T}, H={args.cam_expect_H}, W={args.cam_expect_W}")
 
     logger.info(f"Loaded {len(entries)} test entries from {args.csv}")
 
@@ -533,7 +545,7 @@ def main() -> None:
         logger.info(f"Processing checkpoint: {ckpt_path}")
         logger.info("=" * 80)
 
-        model = load_model(str(ckpt_path), device=args.device)
+        model = load_model(str(ckpt_path), config_path=str(args.config), device=args.device)
         target_layer = model.backbone.blocks[-1]
 
         cam_generators = {

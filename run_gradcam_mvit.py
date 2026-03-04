@@ -20,6 +20,7 @@ import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F
+import yaml
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -32,17 +33,92 @@ from cam_util import SimpleGradCAM, ScoreCAM, LayerCAM, GradCAMPlusPlus, Origina
 logger = logging.get_logger(__name__)
 
 
-def load_model(checkpoint_path, device='cuda'):
-    """Load MViTv2 ReID model with config."""
+def load_config(config_path, num_classes=None):
+    """Load YACS config from YAML file for MViT. Merges with SlowFast defaults."""
+    yaml_cfg = {}
+    if config_path and os.path.exists(config_path):
+        with open(config_path, "r") as f:
+            yaml_cfg = yaml.safe_load(f) or {}
+        logger.info(f"Loaded config from {config_path}")
+
+    cfg = sf_get_cfg()
+
+    # Data config
+    data_cfg = yaml_cfg.get("DATA", {})
+    cfg.DATA.NUM_FRAMES = data_cfg.get("NUM_FRAMES", 16)
+    cfg.DATA.HEIGHT = data_cfg.get("HEIGHT", 224)
+    cfg.DATA.WIDTH = data_cfg.get("WIDTH", 224)
+    cfg.DATA.TRAIN_CROP_SIZE = cfg.DATA.HEIGHT
+    cfg.DATA.TEST_CROP_SIZE = cfg.DATA.HEIGHT
+    cfg.DATA.INPUT_CHANNEL_NUM = [3]
+    cfg.DATA.SHOT_CLASSIFICATION = data_cfg.get("SHOT_CLASSIFICATION", False)
+
+    # Model config
+    model_cfg = yaml_cfg.get("MODEL", {})
+    cfg.MODEL.ARCH = model_cfg.get("ARCH", "mvit")
+    cfg.MODEL.MODEL_NAME = model_cfg.get("MODEL_NAME", "MViTReID")
+    cfg.MODEL.NUM_CLASSES = num_classes if num_classes is not None else model_cfg.get("NUM_CLASSES", 0)
+    cfg.MODEL.USE_CHECKPOINT = model_cfg.get("USE_CHECKPOINT", True)
+    cfg.MODEL.CHECKPOINT_NUM = model_cfg.get("CHECKPOINT_NUM", [0])
+
+    # MViT config - load from YAML or use defaults
+    mvit_cfg = yaml_cfg.get("MVIT", {})
+    cfg.MVIT.MODE = mvit_cfg.get("MODE", "conv")
+    cfg.MVIT.CLS_EMBED_ON = mvit_cfg.get("CLS_EMBED_ON", True)
+    cfg.MVIT.PATCH_KERNEL = mvit_cfg.get("PATCH_KERNEL", [3, 7, 7])
+    cfg.MVIT.PATCH_STRIDE = mvit_cfg.get("PATCH_STRIDE", [2, 4, 4])
+    cfg.MVIT.PATCH_PADDING = mvit_cfg.get("PATCH_PADDING", [1, 3, 3])
+    cfg.MVIT.EMBED_DIM = mvit_cfg.get("EMBED_DIM", 96)
+    cfg.MVIT.NUM_HEADS = mvit_cfg.get("NUM_HEADS", 1)
+    cfg.MVIT.MLP_RATIO = mvit_cfg.get("MLP_RATIO", 4.0)
+    cfg.MVIT.QKV_BIAS = mvit_cfg.get("QKV_BIAS", True)
+    cfg.MVIT.DROPPATH_RATE = mvit_cfg.get("DROPPATH_RATE", 0.2)
+    cfg.MVIT.DEPTH = mvit_cfg.get("DEPTH", 16)
+    cfg.MVIT.NORM = mvit_cfg.get("NORM", "layernorm")
+    cfg.MVIT.USE_ABS_POS = mvit_cfg.get("USE_ABS_POS", False)
+    cfg.MVIT.REL_POS_SPATIAL = mvit_cfg.get("REL_POS_SPATIAL", True)
+    cfg.MVIT.REL_POS_TEMPORAL = mvit_cfg.get("REL_POS_TEMPORAL", True)
+    cfg.MVIT.SEP_POS_EMBED = mvit_cfg.get("SEP_POS_EMBED", False)
+    cfg.MVIT.USE_FIXED_SINCOS_POS = mvit_cfg.get("USE_FIXED_SINCOS_POS", False)
+    cfg.MVIT.DIM_MUL_IN_ATT = mvit_cfg.get("DIM_MUL_IN_ATT", True)
+    cfg.MVIT.RESIDUAL_POOLING = mvit_cfg.get("RESIDUAL_POOLING", True)
+    cfg.MVIT.USE_MEAN_POOLING = mvit_cfg.get("USE_MEAN_POOLING", False)
+    cfg.MVIT.DIM_MUL = mvit_cfg.get("DIM_MUL", [[1, 2.0], [3, 2.0], [14, 2.0]])
+    cfg.MVIT.HEAD_MUL = mvit_cfg.get("HEAD_MUL", [[1, 2.0], [3, 2.0], [14, 2.0]])
+    cfg.MVIT.POOL_KVQ_KERNEL = mvit_cfg.get("POOL_KVQ_KERNEL", [3, 3, 3])
+    cfg.MVIT.POOL_KV_STRIDE_ADAPTIVE = mvit_cfg.get("POOL_KV_STRIDE_ADAPTIVE", [1, 8, 8])
+    cfg.MVIT.POOL_Q_STRIDE = mvit_cfg.get("POOL_Q_STRIDE", [
+        [0, 1, 1, 1], [1, 1, 2, 2], [2, 1, 1, 1], [3, 1, 2, 2],
+        [4, 1, 1, 1], [5, 1, 1, 1], [6, 1, 1, 1], [7, 1, 1, 1],
+        [8, 1, 1, 1], [9, 1, 1, 1], [10, 1, 1, 1], [11, 1, 1, 1],
+        [12, 1, 1, 1], [13, 1, 1, 1], [14, 1, 2, 2], [15, 1, 1, 1],
+    ])
+    cfg.MVIT.PRETRAIN = mvit_cfg.get("PRETRAIN", "")
+    cfg.MVIT.FROZEN = mvit_cfg.get("FROZEN", False)
+
+    # ReID config
+    reid_cfg = yaml_cfg.get("REID", {})
+    if not hasattr(cfg, "REID") or cfg.REID is None:
+        cfg.REID = CfgNode()
+    cfg.REID.EMBED_DIM = reid_cfg.get("EMBED_DIM", 512)
+    cfg.REID.NECK_FEAT = reid_cfg.get("NECK_FEAT", "after")
+
+    return cfg
+
+
+def load_model(checkpoint_path, config_path=None, device='cuda'):
+    """Load MViTv2 ReID model. Uses config_path if provided, else builds from checkpoint."""
     checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
 
     # Infer num_classes and embed_dim from checkpoint
-    state_dict = checkpoint['model_state_dict']
+    state_dict = checkpoint.get('model_state_dict', checkpoint)
+    if not isinstance(state_dict, dict):
+        state_dict = checkpoint
     num_classes = None
     embed_dim = None
 
     for key in state_dict.keys():
-        if 'classifier.weight' in key:
+        if 'classifier.weight' in key or 'reid_head.classifier.weight' in key:
             num_classes = state_dict[key].shape[0]
             embed_dim = state_dict[key].shape[1]
             logger.info(f"Detected {num_classes} classes from checkpoint")
@@ -57,53 +133,15 @@ def load_model(checkpoint_path, device='cuda'):
         logger.warning("Could not infer embed_dim from checkpoint, using default 512")
         embed_dim = 512
 
-    cfg = sf_get_cfg()
-    cfg.MODEL.ARCH = "mvit"
-    cfg.MODEL.MODEL_NAME = "MViT"
-    cfg.MODEL.NUM_CLASSES = num_classes
-    cfg.DATA.NUM_FRAMES = 16  # KEY: 16 frames!
-    cfg.DATA.TRAIN_CROP_SIZE = 224
-    cfg.DATA.TEST_CROP_SIZE = 224
-    cfg.DATA.HEIGHT = 224
-    cfg.DATA.INPUT_CHANNEL_NUM = [3]
+    if config_path and os.path.exists(config_path):
+        cfg = load_config(config_path, num_classes=num_classes)
+        cfg.REID.EMBED_DIM = embed_dim  # Override with checkpoint-inferred value
+    else:
+        cfg = load_config(None, num_classes=num_classes)
+        cfg.REID.EMBED_DIM = embed_dim
+        cfg.DATA.SHOT_CLASSIFICATION = False
 
-    # MViT config
-    cfg.MVIT.MODE = "conv"
-    cfg.MVIT.CLS_EMBED_ON = True
-    cfg.MVIT.PATCH_KERNEL = [3, 7, 7]
-    cfg.MVIT.PATCH_STRIDE = [2, 4, 4]
-    cfg.MVIT.PATCH_PADDING = [1, 3, 3]
-    cfg.MVIT.EMBED_DIM = 96
-    cfg.MVIT.NUM_HEADS = 1
-    cfg.MVIT.MLP_RATIO = 4.0
-    cfg.MVIT.QKV_BIAS = True
-    cfg.MVIT.DROPPATH_RATE = 0.2
-    cfg.MVIT.DEPTH = 16
-    cfg.MVIT.NORM = "layernorm"
-    cfg.MVIT.USE_ABS_POS = False
-    cfg.MVIT.REL_POS_SPATIAL = True
-    cfg.MVIT.REL_POS_TEMPORAL = True
-    cfg.MVIT.SEP_POS_EMBED = False
-    cfg.MVIT.USE_FIXED_SINCOS_POS = False
-    cfg.MVIT.DIM_MUL_IN_ATT = True
-    cfg.MVIT.RESIDUAL_POOLING = True
-    cfg.MVIT.USE_MEAN_POOLING = False
-    cfg.MVIT.DIM_MUL = [[1, 2.0], [3, 2.0], [14, 2.0]]
-    cfg.MVIT.HEAD_MUL = [[1, 2.0], [3, 2.0], [14, 2.0]]
-    cfg.MVIT.POOL_KVQ_KERNEL = [3, 3, 3]
-    cfg.MVIT.POOL_KV_STRIDE_ADAPTIVE = [1, 8, 8]
-    cfg.MVIT.POOL_Q_STRIDE = [
-        [0, 1, 1, 1], [1, 1, 2, 2], [2, 1, 1, 1], [3, 1, 2, 2],
-        [4, 1, 1, 1], [5, 1, 1, 1], [6, 1, 1, 1], [7, 1, 1, 1],
-        [8, 1, 1, 1], [9, 1, 1, 1], [10, 1, 1, 1], [11, 1, 1, 1],
-        [12, 1, 1, 1], [13, 1, 1, 1], [14, 1, 2, 2], [15, 1, 1, 1],
-    ]
-
-    cfg.REID = CfgNode()
-    cfg.REID.EMBED_DIM = embed_dim
-    cfg.REID.NECK_FEAT = "after"
-    cfg.MVIT.PRETRAIN = ""
-    cfg.MVIT.FROZEN = False
+    logger.info(f"SHOT_CLASSIFICATION={cfg.DATA.SHOT_CLASSIFICATION} (CAM will use classification logits)")
 
     model = MViTReID(cfg)
     model.load_state_dict(state_dict, strict=True)
@@ -187,10 +225,10 @@ def process_video(video_path, T=16, out_size=224):
             frames_224.append(frames_224[-1].copy())
             frames_original.append(frames_original[-1].copy())
 
-    # Normalize to tensor [1, C, T, H, W] using 224x224 frames
+    # Normalize to tensor [1, C, T, H, W] using ImageNet stats (consistent with batch scripts)
     frames_np = (np.stack(frames_224).astype(np.float32) / 255.0)
-    mean = np.array([0.45, 0.45, 0.45]).reshape(1, 1, 1, 3)
-    std = np.array([0.225, 0.225, 0.225]).reshape(1, 1, 1, 3)
+    mean = np.array([0.485, 0.456, 0.406]).reshape(1, 1, 1, 3)
+    std = np.array([0.229, 0.224, 0.225]).reshape(1, 1, 1, 3)
     frames_np = (frames_np - mean) / std
     tensor = torch.from_numpy(frames_np).float().permute(3, 0, 1, 2).unsqueeze(0)
 
@@ -200,29 +238,56 @@ def process_video(video_path, T=16, out_size=224):
 def reshape_cam_3d(cam_flat, expect_T=8, expect_H=7, expect_W=7):
     """
     Reshape flat token CAM to [T, H, W] with heuristics and checks.
+    Supports MViTv2 (8x7x7), VideoMAEv2 (8x14x14), UniFormerV2, etc.
     """
     num_tokens = cam_flat.shape[1]
-    expected = expect_T * expect_H * expect_W
-    if num_tokens == expected:
-        T, H, W = expect_T, expect_H, expect_W
-    else:
-        logger.warning(f"Token count mismatch: got {num_tokens}, expected {expected}. Trying to infer T,H,W...")
-        # Heuristic: prefer T=8 if divisible by 7*7
-        if num_tokens % (expect_H * expect_W) == 0:
-            T = num_tokens // (expect_H * expect_W)
-            H, W = expect_H, expect_W
-        else:
-            # cube-ish fallback
-            T = int(round(num_tokens ** (1/3)))
-            rem = max(num_tokens // max(T, 1), 1)
-            H = int(round(rem ** 0.5))
-            W = max(rem // max(H, 1), 1)
-            if T * H * W != num_tokens:
-                raise RuntimeError(f"Cannot reshape CAM tokens: {num_tokens} != {T}*{H}*{W}")
-        logger.info(f"Inferred CAM shape: T={T}, H={H}, W={W}")
 
-    cam_3d = cam_flat[0].reshape(T, H, W)  # [T, H, W]
-    cam_3d = np.maximum(cam_3d, 0)        # safety
+    # Try multiple expected shapes in order (MViTv2 typical: 8x7x7=392)
+    candidate_shapes = [
+        (expect_T, expect_H, expect_W),
+        (8, 7, 7),
+        (8, 14, 14),
+        (16, 14, 14),
+        (4, 7, 7),
+    ]
+
+    T, H, W = None, None, None
+    for t_try, h_try, w_try in candidate_shapes:
+        if num_tokens == t_try * h_try * w_try:
+            T, H, W = t_try, h_try, w_try
+            logger.info(f"Matched CAM shape: T={T}, H={H}, W={W}")
+            break
+
+    if T is None:
+        logger.warning(f"Token count {num_tokens} doesn't match known shapes, inferring...")
+        preferred_spatial = [7 * 7, 14 * 14, 8 * 8, 4 * 4, 16 * 16]
+        for spatial_size in preferred_spatial:
+            if num_tokens % spatial_size == 0:
+                T = num_tokens // spatial_size
+                H = W = int(spatial_size ** 0.5)
+                logger.info(f"Inferred CAM shape: T={T}, H={H}, W={W}")
+                break
+        if T is None:
+            for T_try in [8, 4, 2, 16, 1]:
+                if num_tokens % T_try == 0:
+                    rem = num_tokens // T_try
+                    H_try = int(round(rem ** 0.5))
+                    for H_candidate in range(H_try, 0, -1):
+                        if rem % H_candidate == 0:
+                            W_candidate = rem // H_candidate
+                            T, H, W = T_try, H_candidate, W_candidate
+                            logger.info(f"Inferred CAM shape: T={T}, H={H}, W={W}")
+                            break
+                    if T is not None:
+                        break
+        if T is None:
+            raise RuntimeError(f"Cannot factorize {num_tokens} into T*H*W")
+
+    if T * H * W != num_tokens:
+        raise RuntimeError(f"Shape error: {T}*{H}*{W}={T*H*W} != {num_tokens}")
+
+    cam_3d = cam_flat[0].reshape(T, H, W)
+    cam_3d = np.maximum(cam_3d, 0)
     return cam_3d
 
 
@@ -283,6 +348,7 @@ def main():
     parser.add_argument("--video_list", type=str, default=None,
                         help="Path to text file containing video paths (one per line)")
     parser.add_argument("--checkpoint", default="/home/zhang.13617/Desktop/zhang.13617/NBA/ckpt/baicheng_ckpt/mvitv2_freethrow_mask_k400_16frames_1e-5/best_model.pth")
+    parser.add_argument("--config", default=None, help="Model config YAML (required for SHOT_CLASSIFICATION and correct CAM)")
     parser.add_argument("--output", default="./cam_output")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--target_id", type=int, default=-1, help="Target class id for CAM; -1 means use argmax")
@@ -316,7 +382,7 @@ def main():
     # ============================================================
     # LOAD MODEL ONCE (KEY OPTIMIZATION!)
     # ============================================================
-    model = load_model(args.checkpoint, args.device)
+    model = load_model(args.checkpoint, config_path=args.config, device=args.device)
 
     # Setup CAM generator once
     target_layer = model.backbone.blocks[-1]

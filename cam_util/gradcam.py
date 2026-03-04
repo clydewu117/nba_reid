@@ -25,19 +25,24 @@ class SimpleGradCAM:
         # Register hook for BN folding (capture features before BN)
         if bn_folding and hasattr(model, 'reid_head'):
             if hasattr(model.reid_head, 'feat_proj') and model.reid_head.feat_proj is not None:
-                # Hook on feat_proj if it exists
+                # VideoMAE: feat_proj output is input to bottleneck
                 model.reid_head.feat_proj.register_forward_hook(self.save_pre_bn_features)
                 logger.info("BN Folding enabled: registered hook on feat_proj")
-            elif hasattr(model, 'backbone'):
-                # If no feat_proj, hook on backbone output directly
-                model.backbone.register_forward_hook(self.save_pre_bn_features)
-                logger.info("BN Folding enabled: registered hook on backbone (no feat_proj)")
             else:
-                logger.warning("BN Folding requested but no feat_proj or backbone found")
-                self.bn_folding = False
+                # MViTv2/UniFormerV2: backbone.__call__ may not be used; reid_head input is pre-BN
+                model.reid_head.register_forward_pre_hook(self._save_pre_bn_from_input)
+                logger.info("BN Folding enabled: registered pre_hook on reid_head (no feat_proj)")
+
+    def _save_pre_bn_from_input(self, module, input):
+        """Pre-hook: capture reid_head input (features before BN)."""
+        if len(input) > 0:
+            self.pre_bn_features = input[0]
+            if hasattr(self.pre_bn_features, 'requires_grad') and self.pre_bn_features.requires_grad:
+                self.pre_bn_features.retain_grad()
+                logger.info(f"[BN Folding] Retained grad on pre-BN features: {self.pre_bn_features.shape}")
 
     def save_pre_bn_features(self, module, input, output):
-        """Save features before BN layer for BN folding."""
+        """Save features before BN layer for BN folding (forward hook)."""
         self.pre_bn_features = output
         if output.requires_grad:
             output.retain_grad()
@@ -136,8 +141,29 @@ class SimpleGradCAM:
         self.activations = None
         self.gradients = None
 
-        # Forward pass (model now returns cls_score in both train/eval modes)
-        output = self._forward_for_cam(input_tensor)
+        # MViTv2: use patch mean for gradient flow; two-phase when choosing class (CLS for correct argmax)
+        has_cam_pooling = hasattr(self.model, "_cam_pooling")
+        chosen = None
+        if has_cam_pooling and (target_id is None or target_id < 0):
+            # Phase 1: CLS path for correct chosen (avoids BN/patch-mean distribution mismatch)
+            self.model._cam_pooling = "choose_class"
+            try:
+                with torch.no_grad():
+                    output_cls = self._forward_for_cam(input_tensor)
+                logits_cls = self._extract_logits(output_cls)
+                if logits_cls is not None:
+                    chosen = int(torch.argmax(logits_cls[0]).item())
+                    logger.info(f"[MViT two-phase] Chosen class {chosen} from CLS path (BN-calibrated)")
+            finally:
+                self.model._cam_pooling = None
+        # Phase 2: patch mean path for gradient flow (activations captured here)
+        if has_cam_pooling:
+            self.model._cam_pooling = "gradient"
+        try:
+            output = self._forward_for_cam(input_tensor)
+        finally:
+            if has_cam_pooling:
+                self.model._cam_pooling = None
 
         logits = self._extract_logits(output)
         if logits is not None:
@@ -151,7 +177,7 @@ class SimpleGradCAM:
 
         # Select scalar score for backprop
         if logits is not None:
-            # Compute probabilities and show top-5 predictions
+            # Compute probabilities and show top-5 predictions (from gradient-phase logits)
             probs = F.softmax(logits[0], dim=0)
             top5_probs, top5_ids = torch.topk(probs, min(5, logits.shape[1]))
 
@@ -162,7 +188,9 @@ class SimpleGradCAM:
                 logger.info(f"  Rank {i+1}: Class {int(pred_id):3d} | Probability: {float(prob)*100:6.2f}% | Logit: {logit_val:+.3f}")
             logger.info("="*70)
 
-            if target_id is None or target_id < 0 or target_id >= logits.shape[1]:
+            if chosen is not None:
+                pass  # use chosen from two-phase
+            elif target_id is None or target_id < 0 or target_id >= logits.shape[1]:
                 chosen = int(torch.argmax(logits[0]).item())
             else:
                 chosen = int(target_id)
@@ -312,10 +340,15 @@ class SimpleGradCAM:
             logger.info(f"After removing CLS and reshaping: activations {activations.shape}, gradients {gradients.shape} (T={T}, H={H}, W={W})")
             
         elif self.activations.dim() == 3:
-            # MViT format: [B, N, C]
+            # MViT format: [B, N, C] where N=tokens (1+THW when cls_embed_on)
             logger.info(f"Detected MViT format [B={self.activations.shape[0]}, N={self.activations.shape[1]}, C={self.activations.shape[2]}]")
             activations = self.activations[0:1]  # [1, N, C]
             gradients = self.gradients[0:1]      # [1, N, C]
+            # Remove CLS token for MViT (first token when cls_embed_on)
+            if getattr(self.model.backbone, "cls_embed_on", False):
+                activations = activations[:, 1:, :]
+                gradients = gradients[:, 1:, :]
+                logger.info(f"Removed CLS token for MViT, new shape: {activations.shape}")
         else:
             raise ValueError(f"Unexpected activation shape: {self.activations.shape}")
 
