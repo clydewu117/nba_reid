@@ -268,6 +268,16 @@ class OriginalCAM:
         # Start with backbone features
         features = spatial  # [T, H, W, C_backbone]
 
+        # Step 0: MViT - apply backbone.norm (backbone applies it before reid_head)
+        actual_model = getattr(self.model, "module", self.model)
+        if (
+            not hasattr(actual_model.reid_head, "feat_proj")
+            or actual_model.reid_head.feat_proj is None
+        ) and hasattr(actual_model.backbone, "norm") and actual_model.backbone.norm is not None:
+            features_flat = features.reshape(-1, C_backbone)
+            features = actual_model.backbone.norm(features_flat).reshape(T_s, H_s, W_s, -1)
+            logger.info("[OriginalCAM] Applied backbone.norm (MViT)")
+
         # Step 1: Apply feat_proj if exists (Linear: C_backbone -> C_embed)
         if hasattr(self.model.reid_head, 'feat_proj') and self.model.reid_head.feat_proj is not None:
             logger.info("[OriginalCAM] Folding feat_proj into weights")
