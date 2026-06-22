@@ -18,6 +18,12 @@ class_binary.sh
 reid_80_40.sh
 classification.sh
 classification_shuffle.sh
+nearest_neighbor.sh
+nearest_neighbor_average.sh
+nearest_neighbor_diverse.sh
+tsne_visualization.sh
+
+DMSans-Regular.ttf
 
 __pycache__/
 config/__pycache__/
