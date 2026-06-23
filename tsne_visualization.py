@@ -18,6 +18,7 @@ import csv
 import random
 import argparse
 import math
+import pickle
 
 import numpy as np
 import torch
@@ -32,15 +33,33 @@ matplotlib.use("Agg")
 import matplotlib.font_manager as fm
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-from matplotlib.collections import LineCollection
 from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
+from scipy.spatial import ConvexHull
+from scipy.interpolate import splprep, splev
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
 _FONT_PATH = os.path.join(os.path.dirname(__file__), "DMSans-Regular.ttf")
 if os.path.isfile(_FONT_PATH):
     fm.fontManager.addfont(_FONT_PATH)
-    _font_name = fm.FontProperties(fname=_FONT_PATH).get_name()
-    matplotlib.rcParams["font.family"] = _font_name
+
+
+def _setup_font(font_name="Times New Roman", bold=True):
+    """Configure the matplotlib font globally.
+
+    Parameters
+    ----------
+    font_name : str
+        Any font name recognised by matplotlib (e.g. "Times New Roman",
+        "Arial", "DMSans", or a path-registered font).
+    bold : bool
+        If *True*, set the default weight to bold for all text elements.
+    """
+    matplotlib.rcParams["font.family"] = font_name
+    if bold:
+        matplotlib.rcParams["font.weight"] = "bold"
+        matplotlib.rcParams["axes.titleweight"] = "bold"
+        matplotlib.rcParams["axes.labelweight"] = "bold"
 
 from config.defaults import get_cfg_defaults
 from models.build import build_model
@@ -317,20 +336,101 @@ def find_most_divergent_cluster(app_centroids, mask_centroids, n_players,
     return best_focus, best_app_nn, best_mask_nn, best_diff
 
 
-def _draw_gradient_line(ax, p1, p2, c1, c2, n_seg=120, linewidth=2.5):
-    """Draw a line from *p1* to *p2* with colour smoothly interpolated
-    from *c1* (RGBA) at *p1* to *c2* (RGBA) at *p2*."""
-    xs = np.linspace(p1[0], p2[0], n_seg + 1)
-    ys = np.linspace(p1[1], p2[1], n_seg + 1)
-    points = np.column_stack([xs, ys]).reshape(-1, 1, 2)
-    segments = np.concatenate([points[:-1], points[1:]], axis=1)
+_RANK_STYLES = [
+    {"kind": "line", "linestyle": "-",   "lw": 2.4, "label": "Top-1 Neighbor"},
+    {"kind": "line", "linestyle": "--",  "lw": 2.2, "label": "Top-2 Neighbor"},
+    {"kind": "line", "linestyle": "-.",  "lw": 2.0, "label": "Top-3 Neighbor"},
+    {"kind": "line", "linestyle": ":",   "lw": 1.8, "label": "Top-4 Neighbor"},
+    {"kind": "star", "ms": 3.5, "markevery": 0.02, "label": "Top-5 Neighbor"},
+]
+_RANK_LINE_COLOR = "#2c2c2c"
 
-    colors = np.array([
-        [c1[k] + (c2[k] - c1[k]) * t for k in range(len(c1))]
-        for t in np.linspace(0, 1, n_seg)
-    ])
-    lc = LineCollection(segments, colors=colors, linewidths=linewidth)
-    ax.add_collection(lc)
+
+def _distance_based_colors(pts, centroid, base_rgba, max_lighten=0.65):
+    """Per-point colours graded deep→light by distance to *centroid*."""
+    dists = np.linalg.norm(pts - centroid, axis=1)
+    max_d = dists.max()
+    normed = dists / max_d if max_d > 0 else np.zeros_like(dists)
+    white = np.array([1.0, 1.0, 1.0])
+    colors = np.empty((len(pts), 4))
+    for i, t in enumerate(normed):
+        colors[i, :3] = np.clip(
+            base_rgba[:3] * (1 - t * max_lighten) + white * t * max_lighten,
+            0.0, 1.0,
+        )
+        colors[i, 3] = base_rgba[3]
+    return colors
+
+
+def _draw_convex_hull_boundary(ax, points, color, linewidth=2.8, alpha=0.65,
+                               pad_frac=0.04, smooth_k=3, n_eval=200):
+    """Draw a smooth, padded dashed boundary around *points*.
+
+    Uses the convex hull vertices, pads them outward from the centroid,
+    then fits a periodic B-spline for a rounded appearance.
+    """
+    if len(points) < 3:
+        return
+    try:
+        hull = ConvexHull(points)
+    except Exception:
+        return
+
+    verts = points[hull.vertices]
+    centroid = verts.mean(axis=0)
+
+    # Pad outward from centroid
+    dirs = verts - centroid
+    norms = np.linalg.norm(dirs, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    pad = pad_frac * norms.max()
+    verts_padded = verts + dirs / norms * pad
+
+    # Close the polygon for periodic spline
+    verts_closed = np.vstack([verts_padded, verts_padded[0]])
+
+    k = min(smooth_k, len(verts_padded) - 1)
+    if k < 1:
+        return
+    try:
+        tck, _ = splprep([verts_closed[:, 0], verts_closed[:, 1]],
+                         s=0, per=True, k=k)
+        t_new = np.linspace(0, 1, n_eval)
+        xs, ys = splev(t_new, tck)
+    except Exception:
+        xs, ys = verts_closed[:, 0], verts_closed[:, 1]
+
+    ax.plot(xs, ys, color=color, linestyle="--",
+            linewidth=linewidth, alpha=alpha)
+
+
+def _draw_ranked_line(ax, p1, p2, rank):
+    """Draw a connection line whose style indicates *rank*."""
+    if rank >= len(_RANK_STYLES):
+        return
+    style = _RANK_STYLES[rank]
+    if style["kind"] == "line":
+        ax.plot([p1[0], p2[0]], [p1[1], p2[1]],
+                color=_RANK_LINE_COLOR, linestyle=style["linestyle"],
+                linewidth=style["lw"], alpha=0.75, solid_capstyle="round")
+    else:
+        dist = np.linalg.norm(np.array(p2) - np.array(p1))
+        spacing = style["ms"] * 0.5
+        n_pts = max(int(dist / spacing), 5)
+        ts = np.linspace(0, 1, n_pts)
+        xs = p1[0] + ts * (p2[0] - p1[0])
+        ys = p1[1] + ts * (p2[1] - p1[1])
+        ax.plot(xs, ys, marker="*", linestyle="none",
+                markersize=style["ms"], color=_RANK_LINE_COLOR, alpha=0.75)
+
+
+def _save_fig(fig, save_path, dpi=400):
+    """Save *fig* as PDF, PNG, and SVG (deriving paths from *save_path*)."""
+    base, _ = os.path.splitext(save_path)
+    for ext in (".pdf", ".png", ".svg"):
+        out = base + ext
+        fig.savefig(out, dpi=dpi, bbox_inches="tight")
+        print(f"  Saved: {out}")
 
 
 # ---------------------------------------------------------------------------
@@ -343,18 +443,21 @@ def _draw_identity_panel(ax, coords, player_labels, players, title,
     """Draw a single t-SNE scatter panel on the given *ax*."""
     for i, player in enumerate(players):
         pmask = np.array([p == player for p in player_labels])
-        ax.scatter(
-            coords[pmask, 0], coords[pmask, 1],
-            c=[cmap(i)], label=player.replace("_", " "),
-            s=18, alpha=0.75, edgecolors="none",
-        )
+        pts = coords[pmask]
+        base_rgba = np.array(cmap(i))
+
+        centroid = centroids[i] if centroids else np.median(pts, axis=0)
+
+        point_colors = _distance_based_colors(pts, centroid, base_rgba)
+        ax.scatter(pts[:, 0], pts[:, 1],
+                   c=point_colors, label=player.replace("_", " "),
+                   s=18, alpha=0.85, edgecolors="none")
+
+        _draw_convex_hull_boundary(ax, pts, base_rgba[:3])
 
     if focus_idx is not None and neighbor_indices and centroids:
-        c_focus = np.array(cmap(focus_idx))
-        for nb in neighbor_indices:
-            c_nb = np.array(cmap(nb))
-            _draw_gradient_line(ax, centroids[focus_idx], centroids[nb],
-                                c_focus, c_nb)
+        for rank, nb in enumerate(neighbor_indices):
+            _draw_ranked_line(ax, centroids[focus_idx], centroids[nb], rank)
 
     ax.set_title(title, fontsize=16, fontweight="bold", pad=12)
     ax.set_xlabel("t-SNE 1", fontsize=12)
@@ -365,8 +468,15 @@ def plot_tsne_identity_pair(app_coords, mask_coords, player_labels, players,
                             save_path,
                             focus_idx=None, app_neighbors=None,
                             mask_neighbors=None,
-                            app_centroids=None, mask_centroids=None):
-    """Side-by-side Appearance / Mask t-SNE scatter saved as a single PDF."""
+                            app_centroids=None, mask_centroids=None,
+                            app_sample_videos=None, mask_sample_videos=None):
+    """Side-by-side Appearance / Mask t-SNE scatter saved as a single PDF.
+
+    When *app_sample_videos* / *mask_sample_videos* are provided (dicts
+    mapping player index → video dict), representative frame thumbnails
+    are drawn in the margins of each panel with connecting lines to the
+    corresponding class centroids.
+    """
     fig, (ax_app, ax_mask) = plt.subplots(1, 2, figsize=(26, 10))
     cmap = plt.cm.get_cmap("tab20", len(players))
 
@@ -382,19 +492,48 @@ def plot_tsne_identity_pair(app_coords, mask_coords, player_labels, players,
                          neighbor_indices=mask_neighbors,
                          centroids=mask_centroids)
 
-    handles, labels = ax_app.get_legend_handles_labels()
+    if app_sample_videos and focus_idx is not None and app_neighbors:
+        _add_sample_insets(ax_app, app_centroids, focus_idx, app_neighbors,
+                           app_sample_videos, players, cmap, side="left")
+    if mask_sample_videos and focus_idx is not None and mask_neighbors:
+        _add_sample_insets(ax_mask, mask_centroids, focus_idx, mask_neighbors,
+                           mask_sample_videos, players, cmap, side="right")
+
+    player_handles, player_labels_txt = ax_app.get_legend_handles_labels()
+
+    rank_handles = []
+    for style in _RANK_STYLES:
+        if style["kind"] == "line":
+            h = plt.Line2D(
+                [0], [0], color=_RANK_LINE_COLOR,
+                linestyle=style["linestyle"], linewidth=style["lw"],
+                label=style["label"],
+            )
+        else:
+            h = plt.Line2D(
+                [0], [0], color=_RANK_LINE_COLOR,
+                marker="*", linestyle="none", markersize=style["ms"],
+                label=style["label"],
+            )
+        rank_handles.append(h)
+    ax_app.legend(handles=rank_handles, loc="upper right", fontsize=9,
+                  frameon=True, framealpha=0.9, title="Neighbor Rank",
+                  title_fontsize=10, numpoints=6, handlelength=5.0)
+    ax_mask.legend(handles=rank_handles, loc="upper right", fontsize=9,
+                   frameon=True, framealpha=0.9, title="Neighbor Rank",
+                   title_fontsize=10, numpoints=6, handlelength=5.0)
+
     fig.legend(
-        handles, labels,
+        player_handles, player_labels_txt,
         fontsize=10, ncol=10,
-        loc="upper center", bbox_to_anchor=(0.5, 0.06),
+        loc="upper center", bbox_to_anchor=(0.5, 0.04),
         frameon=True, markerscale=3.0, columnspacing=1.0,
         handletextpad=0.4,
     )
 
     fig.subplots_adjust(bottom=0.12, wspace=0.15)
-    fig.savefig(save_path, dpi=400, bbox_inches="tight")
+    _save_fig(fig, save_path)
     plt.close(fig)
-    print(f"  Saved: {save_path}")
 
 
 def plot_tsne_by_jersey(coords, cluster_labels, centroids, cluster_names,
@@ -445,9 +584,133 @@ def plot_tsne_by_jersey(coords, cluster_labels, centroids, cluster_names,
     ax.set_xlabel("t-SNE 1", fontsize=12)
     ax.set_ylabel("t-SNE 2", fontsize=12)
     fig.tight_layout()
-    fig.savefig(save_path, dpi=400, bbox_inches="tight")
+    _save_fig(fig, save_path)
     plt.close(fig)
-    print(f"  Saved: {save_path}")
+
+
+# ---------------------------------------------------------------------------
+# Sample image helpers
+# ---------------------------------------------------------------------------
+
+def _find_centroid_video(videos, player_labels, tsne_coords, centroid, player):
+    """Return the video dict whose t-SNE point is nearest the *centroid*."""
+    pmask = np.array([p == player for p in player_labels])
+    indices = np.where(pmask)[0]
+    dists = np.linalg.norm(tsne_coords[indices] - centroid, axis=1)
+    return videos[indices[np.argmin(dists)]]
+
+
+def _extract_middle_frame(video_path, size=(224, 224)):
+    """Extract and resize the middle frame of a video file."""
+    try:
+        frames = decode_all_frames(video_path)
+    except Exception:
+        return Image.new("RGB", size, (200, 200, 200))
+    if not frames:
+        return Image.new("RGB", size, (200, 200, 200))
+    img = Image.fromarray(frames[len(frames) // 2])
+    return img.resize(size, Image.LANCZOS)
+
+
+def _add_sample_insets(ax, centroids, focus_idx, neighbor_indices,
+                       sample_videos, players, cmap, side="left",
+                       img_size=200, zoom=0.45):
+    """Place sample thumbnails in a compact 2-col × 3-row grid on one side.
+
+    *side* controls placement: ``'left'`` for the appearance panel (images
+    appear to the left of the axes) and ``'right'`` for the mask panel
+    (images appear to the right).  Connecting lines run from each class
+    centroid to its thumbnail.
+    """
+    all_indices = [focus_idx] + list(neighbor_indices)
+    n = len(all_indices)
+
+    grid_cols, grid_rows = 2, (n + 1) // 2
+    col_step = 0.16
+    row_step = 0.22
+    x_base = -0.34 if side == "left" else 1.12
+    y_top = 0.8
+
+    positions = []
+    for r in range(grid_rows):
+        for c in range(grid_cols):
+            if len(positions) >= n:
+                break
+            positions.append((x_base + c * col_step,
+                              y_top - r * row_step))
+
+    for k, (idx, (bx, by)) in enumerate(zip(all_indices, positions)):
+        if idx not in sample_videos:
+            continue
+        video = sample_videos[idx]
+        img = _extract_middle_frame(video["app_path"],
+                                    size=(img_size, img_size))
+        img_arr = np.array(img)
+        imagebox = OffsetImage(img_arr, zoom=zoom)
+
+        is_focus = (k == 0)
+        rgba = cmap(idx)
+        edge_color = "red" if is_focus else rgba[:3]
+        lw = 2.8 if is_focus else 1.8
+
+        ab = AnnotationBbox(
+            imagebox, xy=tuple(centroids[idx]),
+            xybox=(bx, by),
+            xycoords="data", boxcoords="axes fraction",
+            arrowprops=dict(arrowstyle="-", color=edge_color, lw=1.5),
+            frameon=True,
+            bboxprops=dict(edgecolor=edge_color, linewidth=lw),
+            pad=0.3,
+        )
+        ab.set_clip_on(False)
+        ax.add_artist(ab)
+
+        name = players[idx].replace("_", " ")
+        label = f"Focus: {name}" if is_focus else f"Top-{k}: {name}"
+        txt = ax.text(bx, by - 0.10, label, transform=ax.transAxes,
+                      fontsize=7, ha="center", va="top", fontweight="bold",
+                      color="red" if is_focus else "k")
+        txt.set_clip_on(False)
+
+
+def plot_sample_images(focus_player, focus_video,
+                       app_nb_players, app_nb_videos,
+                       mask_nb_players, mask_nb_videos,
+                       save_path):
+    """Visualise representative frames for the focus player and its
+    top-K nearest neighbours from both appearance and mask space."""
+    k = len(app_nb_players)
+    n_cols = 1 + k
+    fig, axes = plt.subplots(2, n_cols, figsize=(3.2 * n_cols, 7.5))
+
+    for row, (nb_players, nb_videos, row_label) in enumerate([
+        (app_nb_players, app_nb_videos, "App Neighbors"),
+        (mask_nb_players, mask_nb_videos, "Mask Neighbors"),
+    ]):
+        all_p = [focus_player] + nb_players
+        all_v = [focus_video] + nb_videos
+        for col, (player, video) in enumerate(zip(all_p, all_v)):
+            ax = axes[row, col]
+            img = _extract_middle_frame(video["app_path"])
+            ax.imshow(img)
+            ax.axis("off")
+            name = player.replace("_", " ")
+            if col == 0:
+                ax.set_title(f"Focus\n{name}", fontsize=9,
+                             fontweight="bold", color="red")
+            else:
+                ax.set_title(f"Top-{col}\n{name}", fontsize=9)
+
+    fig.text(0.01, 0.73, "App\nNeighbors", fontsize=11, fontweight="bold",
+             va="center", ha="center", rotation=90)
+    fig.text(0.01, 0.30, "Mask\nNeighbors", fontsize=11, fontweight="bold",
+             va="center", ha="center", rotation=90)
+
+    fig.suptitle("Most Divergent Individual & Nearest Neighbors",
+                 fontsize=14, fontweight="bold", y=1.01)
+    fig.tight_layout(rect=[0.03, 0, 1, 0.98])
+    _save_fig(fig, save_path)
+    plt.close(fig)
 
 
 # ---------------------------------------------------------------------------
@@ -472,31 +735,129 @@ def main():
                         help="also produce jersey-colour plots (off by default)")
     parser.add_argument("--n-color-clusters", type=int, default=10,
                         help="number of jersey-colour clusters for KMeans")
+    parser.add_argument("--no-cache",       action="store_true",
+                        help="force re-extraction even if cached features exist")
     parser.add_argument("--n-confused-pairs", type=int, default=5,
                         help="number of confused cluster pairs to highlight")
+    parser.add_argument("--show-sample-insets", action="store_true",
+                        help="embed sample-image thumbnails beside the "
+                             "t-SNE scatter (off by default)")
     parser.add_argument("--perplexity",     type=float, default=30.0)
     parser.add_argument("--num-frames",     type=int, default=None)
+    parser.add_argument("--font",           type=str,
+                        default="Times New Roman",
+                        help="font name for plots (default: Times New Roman)")
     parser.add_argument("--seed",           type=int, default=42)
     args = parser.parse_args()
 
+    _setup_font(args.font, bold=True)
     set_seed(args.seed)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # ── Build video list ─────────────────────────────────────────────────────
-    app_cfg = get_cfg_defaults()
-    app_cfg.merge_from_file(args.app_config)
-    data_root = app_cfg.DATA.ROOT
+    # ── Feature cache ────────────────────────────────────────────────────────
+    cache_path = os.path.join(args.output_dir, "feature_cache.pkl")
 
-    videos, players, total_players = build_video_list(
-        data_root, args.shot_type, max_players=args.num_players,
-    )
-    num_classes = total_players
-    print(f"Total players in dataset: {total_players}")
-    print(f"Using first {len(players)} players ({len(videos)} videos, "
-          f"shot_type={args.shot_type})")
+    if not args.no_cache and os.path.isfile(cache_path):
+        print(f"Loading cached features from {cache_path} …")
+        with open(cache_path, "rb") as f:
+            cache = pickle.load(f)
+        app_feats = cache["app_feats"]
+        mask_feats = cache["mask_feats"]
+        videos = cache["videos"]
+        players = cache["players"]
+        total_players = cache["total_players"]
+        print(f"  {len(players)} players, {len(videos)} videos, "
+              f"feat dim={app_feats.shape[1]}")
+    else:
+        # ── Build video list ──────────────────────────────────────────────
+        app_cfg = get_cfg_defaults()
+        app_cfg.merge_from_file(args.app_config)
+        data_root = app_cfg.DATA.ROOT
 
-    num_frames = args.num_frames or app_cfg.DATA.NUM_FRAMES
+        videos, players, total_players = build_video_list(
+            data_root, args.shot_type, max_players=args.num_players,
+        )
+        num_classes = total_players
+        print(f"Total players in dataset: {total_players}")
+        print(f"Using first {len(players)} players ({len(videos)} videos, "
+              f"shot_type={args.shot_type})")
+
+        num_frames = args.num_frames or app_cfg.DATA.NUM_FRAMES
+
+        # ── Appearance model ──────────────────────────────────────────────
+        print("\n" + "=" * 60)
+        print("Loading appearance model …")
+        app_cfg.MODEL.NUM_CLASSES = num_classes
+        if not torch.cuda.is_available():
+            app_cfg.NUM_GPUS = 0
+        app_cfg.freeze()
+
+        app_model = build_model(app_cfg)
+        ckpt = torch.load(args.app_checkpoint, map_location=device,
+                          weights_only=False)
+        app_model.load_state_dict(ckpt["model_state_dict"])
+        app_model = app_model.to(device).eval()
+        print(f"  Loaded epoch {ckpt.get('epoch', '?')}")
+
+        app_transform = T.Compose([
+            T.Resize((app_cfg.DATA.HEIGHT, app_cfg.DATA.WIDTH)),
+            T.ToTensor(),
+            T.Normalize(mean=[0.485, 0.456, 0.406],
+                        std=[0.229, 0.224, 0.225]),
+        ])
+
+        print(f"Extracting appearance features ({len(videos)} videos) …")
+        app_feats = extract_all_features(
+            app_model, [v["app_path"] for v in videos],
+            num_frames, app_transform, device,
+        ).numpy()
+        del app_model
+        torch.cuda.empty_cache()
+
+        # ── Mask model ────────────────────────────────────────────────────
+        print("\n" + "=" * 60)
+        print("Loading mask model …")
+        mask_cfg = get_cfg_defaults()
+        mask_cfg.merge_from_file(args.mask_config)
+        mask_cfg.MODEL.NUM_CLASSES = num_classes
+        if not torch.cuda.is_available():
+            mask_cfg.NUM_GPUS = 0
+        mask_cfg.freeze()
+
+        mask_model = build_model(mask_cfg)
+        ckpt = torch.load(args.mask_checkpoint, map_location=device,
+                          weights_only=False)
+        mask_model.load_state_dict(ckpt["model_state_dict"])
+        mask_model = mask_model.to(device).eval()
+        print(f"  Loaded epoch {ckpt.get('epoch', '?')}")
+
+        mask_transform = T.Compose([
+            T.Resize((mask_cfg.DATA.HEIGHT, mask_cfg.DATA.WIDTH)),
+            T.ToTensor(),
+            T.Normalize(mean=[0.485, 0.456, 0.406],
+                        std=[0.229, 0.224, 0.225]),
+        ])
+
+        print(f"Extracting mask features ({len(videos)} videos) …")
+        mask_feats = extract_all_features(
+            mask_model, [v["mask_path"] for v in videos],
+            num_frames, mask_transform, device,
+        ).numpy()
+        del mask_model
+        torch.cuda.empty_cache()
+
+        # ── Save cache ────────────────────────────────────────────────────
+        cache = {
+            "app_feats": app_feats,
+            "mask_feats": mask_feats,
+            "videos": videos,
+            "players": players,
+            "total_players": total_players,
+        }
+        with open(cache_path, "wb") as f:
+            pickle.dump(cache, f)
+        print(f"  Cached features → {cache_path}")
 
     # ── Load jersey-colour mapping (optional) ────────────────────────────────
     cluster_labels = centroids = cluster_names = None
@@ -523,64 +884,6 @@ def main():
         for i, (name, cent) in enumerate(zip(cluster_names, centroids)):
             cnt = int((cluster_labels == i).sum())
             print(f"  Cluster {i}: {name:12s}  RGB={cent}  ({cnt} videos)")
-
-    # ── Appearance model ─────────────────────────────────────────────────────
-    print("\n" + "=" * 60)
-    print("Loading appearance model …")
-    app_cfg.MODEL.NUM_CLASSES = num_classes
-    if not torch.cuda.is_available():
-        app_cfg.NUM_GPUS = 0
-    app_cfg.freeze()
-
-    app_model = build_model(app_cfg)
-    ckpt = torch.load(args.app_checkpoint, map_location=device, weights_only=False)
-    app_model.load_state_dict(ckpt["model_state_dict"])
-    app_model = app_model.to(device).eval()
-    print(f"  Loaded epoch {ckpt.get('epoch', '?')}")
-
-    app_transform = T.Compose([
-        T.Resize((app_cfg.DATA.HEIGHT, app_cfg.DATA.WIDTH)),
-        T.ToTensor(),
-        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ])
-
-    print(f"Extracting appearance features ({len(videos)} videos) …")
-    app_feats = extract_all_features(
-        app_model, [v["app_path"] for v in videos],
-        num_frames, app_transform, device,
-    ).numpy()
-    del app_model
-    torch.cuda.empty_cache()
-
-    # ── Mask model ───────────────────────────────────────────────────────────
-    print("\n" + "=" * 60)
-    print("Loading mask model …")
-    mask_cfg = get_cfg_defaults()
-    mask_cfg.merge_from_file(args.mask_config)
-    mask_cfg.MODEL.NUM_CLASSES = num_classes
-    if not torch.cuda.is_available():
-        mask_cfg.NUM_GPUS = 0
-    mask_cfg.freeze()
-
-    mask_model = build_model(mask_cfg)
-    ckpt = torch.load(args.mask_checkpoint, map_location=device, weights_only=False)
-    mask_model.load_state_dict(ckpt["model_state_dict"])
-    mask_model = mask_model.to(device).eval()
-    print(f"  Loaded epoch {ckpt.get('epoch', '?')}")
-
-    mask_transform = T.Compose([
-        T.Resize((mask_cfg.DATA.HEIGHT, mask_cfg.DATA.WIDTH)),
-        T.ToTensor(),
-        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ])
-
-    print(f"Extracting mask features ({len(videos)} videos) …")
-    mask_feats = extract_all_features(
-        mask_model, [v["mask_path"] for v in videos],
-        num_frames, mask_transform, device,
-    ).numpy()
-    del mask_model
-    torch.cuda.empty_cache()
 
     # ── t-SNE ────────────────────────────────────────────────────────────────
     print(f"\nRunning t-SNE (perplexity={args.perplexity}) …")
@@ -616,6 +919,33 @@ def main():
     print(f"  Mask top-{args.n_confused_pairs} neighbours: "
           + ", ".join(players[j] for j in mask_nn))
 
+    # ── Sample videos for the most divergent individual (optional) ──────────
+    app_sample_videos = None
+    mask_sample_videos = None
+    if args.show_sample_insets:
+        print("\nFinding representative frames for insets …")
+        app_sample_videos = {}
+        app_sample_videos[focus_idx] = _find_centroid_video(
+            videos, player_labels, tsne_app,
+            app_centroids[focus_idx], players[focus_idx],
+        )
+        for j in app_nn:
+            app_sample_videos[j] = _find_centroid_video(
+                videos, player_labels, tsne_app,
+                app_centroids[j], players[j],
+            )
+
+        mask_sample_videos = {}
+        mask_sample_videos[focus_idx] = _find_centroid_video(
+            videos, player_labels, tsne_mask,
+            mask_centroids[focus_idx], players[focus_idx],
+        )
+        for j in mask_nn:
+            mask_sample_videos[j] = _find_centroid_video(
+                videos, player_labels, tsne_mask,
+                mask_centroids[j], players[j],
+            )
+
     # ── Generate plots ───────────────────────────────────────────────────────
     print("\nGenerating plots …")
 
@@ -627,6 +957,8 @@ def main():
         mask_neighbors=mask_nn,
         app_centroids=app_centroids,
         mask_centroids=mask_centroids,
+        app_sample_videos=app_sample_videos,
+        mask_sample_videos=mask_sample_videos,
     )
 
     if args.color_by_jersey and cluster_labels is not None:
